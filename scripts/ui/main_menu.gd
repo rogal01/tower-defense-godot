@@ -151,6 +151,7 @@ func _on_endless() -> void:
 	var scene := load("res://scenes/game.tscn")
 	var node: Node = scene.instantiate()
 	get_tree().root.add_child(node)
+	get_tree().current_scene = node
 	node.configure(3, GameData.MapType.CLASSIC)
 	queue_free()
 
@@ -264,6 +265,7 @@ func _start_campaign_level(level_data: Dictionary) -> void:
 	var scene := load("res://scenes/game.tscn")
 	var node: Node = scene.instantiate()
 	get_tree().root.add_child(node)
+	get_tree().current_scene = node
 	node.configure_campaign(level_data)
 	queue_free()
 

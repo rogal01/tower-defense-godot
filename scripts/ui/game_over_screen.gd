@@ -144,6 +144,7 @@ func _on_next_level() -> void:
 	var game_scene: PackedScene = load("res://scenes/game.tscn")
 	var game_node: Node = game_scene.instantiate()
 	get_tree().root.add_child(game_node)
+	get_tree().current_scene = game_node
 	game_node.configure_campaign(level_data)
 	get_parent().queue_free()
 
