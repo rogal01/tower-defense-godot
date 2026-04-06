@@ -39,7 +39,6 @@ func _build_ui() -> void:
 	panel.add_theme_stylebox_override("panel", style)
 	add_child(panel)
 
-	# Top accent line
 	var accent := ColorRect.new()
 	accent.position = Vector2(0, 0)
 	accent.size = Vector2(340, 2)
