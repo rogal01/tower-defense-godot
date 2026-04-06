@@ -11,14 +11,18 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var bg := ColorRect.new()
 	bg.size = Vector2(480, 854)
-	bg.color = GameData.get_palette_color("background").darkened(0.2).with_alpha(0.5)
+	var bg_color: Color = GameData.get_palette_color("background").darkened(0.2)
+	bg_color.a = 0.5
+	bg.color = bg_color
 	add_child(bg)
 
 	var panel := Panel.new()
 	panel.position = Vector2(70, 230)
 	panel.size = Vector2(340, 340)
 	var style := StyleBoxFlat.new()
-	style.bg_color = GameData.get_palette_color("ui_panel").with_alpha(0.97)
+	var panel_color: Color = GameData.get_palette_color("ui_panel")
+	panel_color.a = 0.97
+	style.bg_color = panel_color
 	style.corner_radius_top_left = 6
 	style.corner_radius_top_right = 6
 	style.corner_radius_bottom_left = 6
@@ -27,7 +31,9 @@ func _build_ui() -> void:
 	style.border_width_right = 1
 	style.border_width_top = 2
 	style.border_width_bottom = 1
-	style.border_color = GameData.get_palette_color("accent").with_alpha(0.3)
+	var border_color: Color = GameData.get_palette_color("accent")
+	border_color.a = 0.3
+	style.border_color = border_color
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
 	style.shadow_size = 8
 	panel.add_theme_stylebox_override("panel", style)
@@ -37,7 +43,9 @@ func _build_ui() -> void:
 	var accent := ColorRect.new()
 	accent.position = Vector2(0, 0)
 	accent.size = Vector2(340, 2)
-	accent.color = GameData.get_palette_color("accent").with_alpha(0.4)
+	var accent_color: Color = GameData.get_palette_color("accent")
+	accent_color.a = 0.4
+	accent.color = accent_color
 	panel.add_child(accent)
 
 	var title := Label.new()
