@@ -7,6 +7,7 @@ signal reached_base()
 # ─── State ────────────────────────────────────────────────────────────────────
 var enemy_type: int = GameData.EnemyType.GOBLIN
 var is_boss: bool = false
+var is_elite: bool = false
 var boss_type: int = -1
 var boss_ability: int = -1
 
@@ -93,6 +94,7 @@ func setup(etype: int, pos: Vector2, pidx: int, wps: Array,
 	emoji = p_emoji
 	regen_rate = p_regen
 	is_boss = false
+	is_elite = false
 	enemy_size = GameData.get_enemy(etype)["size"]
 
 func setup_boss(btype: int, pos: Vector2, pidx: int, wps: Array,
@@ -112,6 +114,7 @@ func setup_boss(btype: int, pos: Vector2, pidx: int, wps: Array,
 	damage = p_dmg
 	emoji = p_emoji
 	is_boss = true
+	is_elite = false
 	enemy_size = 55.0
 	boss_ability_cd = 12.0 if p_ability == GameData.BossAbility.SHIELD else 5.0
 	boss_ability_timer = 5.0
@@ -214,6 +217,9 @@ func _draw() -> void:
 	# Shield ring
 	if shield_timer > 0:
 		draw_arc(Vector2.ZERO, sz + 6, 0, TAU, 24, Color(0.3, 0.6, 1.0, 0.5 + sin(_anim_time * 4) * 0.15), 2.5)
+	if is_elite:
+		var elite_pulse := 0.45 + 0.2 * sin(_anim_time * 5.0)
+		draw_arc(Vector2.ZERO, sz + 9, 0, TAU, 28, Color(1.0, 0.84, 0.24, elite_pulse), 2.1)
 
 	# Shadow
 	draw_ellipse_custom(Vector2(0, sz * 0.5), sz * 0.7, sz * 0.25, Color(0, 0, 0, 0.25))
@@ -233,6 +239,8 @@ func _draw() -> void:
 	# HP bar
 	_draw_hp_bar(sz)
 	_draw_status_icons(sz)
+	if is_elite and not is_boss:
+		_draw_elite_crown(sz)
 
 func _draw_enemy_sprite(sz: float, body_col: Color, eye_col: Color, bob: float) -> void:
 	match enemy_type:
@@ -467,20 +475,57 @@ func _draw_shapeshifter(sz: float, col: Color, eye_col: Color, bob: float) -> vo
 	draw_circle(Vector2(ex + sz * 0.08, -sz * 0.1 + bob), sz * 0.06, eye_col)
 
 func _draw_golem(sz: float, col: Color, eye_col: Color, bob: float) -> void:
-	# Blocky body
-	draw_rect(Rect2(-sz * 0.45, -sz * 0.3 + bob, sz * 0.9, sz * 0.8), col)
-	# Head
-	draw_rect(Rect2(-sz * 0.3, -sz * 0.7 + bob, sz * 0.6, sz * 0.45), col.lightened(0.1))
+	# Chunky stone body with beveled silhouette (no hard UI-like rectangles).
+	var torso := PackedVector2Array([
+		Vector2(-sz * 0.48, -sz * 0.18 + bob),
+		Vector2(-sz * 0.35, -sz * 0.44 + bob),
+		Vector2(sz * 0.35, -sz * 0.44 + bob),
+		Vector2(sz * 0.48, -sz * 0.18 + bob),
+		Vector2(sz * 0.40, sz * 0.46 + bob),
+		Vector2(-sz * 0.40, sz * 0.46 + bob),
+	])
+	draw_colored_polygon(torso, col.darkened(0.05))
+	draw_polyline(torso, col.darkened(0.30), 1.8, true)
+
+	var head := PackedVector2Array([
+		Vector2(-sz * 0.30, -sz * 0.82 + bob),
+		Vector2(-sz * 0.20, -sz * 1.02 + bob),
+		Vector2(sz * 0.20, -sz * 1.02 + bob),
+		Vector2(sz * 0.30, -sz * 0.82 + bob),
+		Vector2(sz * 0.24, -sz * 0.56 + bob),
+		Vector2(-sz * 0.24, -sz * 0.56 + bob),
+	])
+	draw_colored_polygon(head, col.lightened(0.12))
+	draw_polyline(head, col.darkened(0.24), 1.5, true)
+
 	# Eyes
-	draw_circle(Vector2(-sz * 0.1, -sz * 0.5 + bob), sz * 0.08, eye_col)
-	draw_circle(Vector2(sz * 0.1, -sz * 0.5 + bob), sz * 0.08, eye_col)
-	# Cracks
-	draw_line(Vector2(-sz * 0.2, -sz * 0.1 + bob), Vector2(-sz * 0.05, sz * 0.2 + bob), col.darkened(0.3), 1.0)
-	draw_line(Vector2(sz * 0.15, 0 + bob), Vector2(sz * 0.3, sz * 0.3 + bob), col.darkened(0.3), 1.0)
-	# Arms
+	draw_circle(Vector2(-sz * 0.10, -sz * 0.76 + bob), sz * 0.09, Color(0.06, 0.06, 0.08))
+	draw_circle(Vector2(sz * 0.10, -sz * 0.76 + bob), sz * 0.09, Color(0.06, 0.06, 0.08))
+	draw_circle(Vector2(-sz * 0.10, -sz * 0.76 + bob), sz * 0.055, eye_col)
+	draw_circle(Vector2(sz * 0.10, -sz * 0.76 + bob), sz * 0.055, eye_col)
+
+	# Shoulders + animated arms
+	draw_circle(Vector2(-sz * 0.42, -sz * 0.14 + bob), sz * 0.14, col.lightened(0.02))
+	draw_circle(Vector2(sz * 0.42, -sz * 0.14 + bob), sz * 0.14, col.lightened(0.02))
 	var step := sin(_anim_time * 4.0) * 1.5
-	draw_rect(Rect2(-sz * 0.7, -sz * 0.2 + bob + step, sz * 0.25, sz * 0.5), col.darkened(0.1))
-	draw_rect(Rect2(sz * 0.45, -sz * 0.2 + bob - step, sz * 0.25, sz * 0.5), col.darkened(0.1))
+	var left_arm := PackedVector2Array([
+		Vector2(-sz * 0.54, -sz * 0.14 + bob + step),
+		Vector2(-sz * 0.78, -sz * 0.06 + bob + step),
+		Vector2(-sz * 0.76, sz * 0.30 + bob + step * 0.5),
+		Vector2(-sz * 0.50, sz * 0.26 + bob + step * 0.5),
+	])
+	var right_arm := PackedVector2Array([
+		Vector2(sz * 0.54, -sz * 0.14 + bob - step),
+		Vector2(sz * 0.78, -sz * 0.06 + bob - step),
+		Vector2(sz * 0.76, sz * 0.30 + bob - step * 0.5),
+		Vector2(sz * 0.50, sz * 0.26 + bob - step * 0.5),
+	])
+	draw_colored_polygon(left_arm, col.darkened(0.10))
+	draw_colored_polygon(right_arm, col.darkened(0.10))
+
+	# Crack details
+	draw_line(Vector2(-sz * 0.18, -sz * 0.10 + bob), Vector2(-sz * 0.02, sz * 0.20 + bob), col.darkened(0.30), 1.2)
+	draw_line(Vector2(sz * 0.14, -sz * 0.03 + bob), Vector2(sz * 0.28, sz * 0.24 + bob), col.darkened(0.30), 1.2)
 
 func _draw_boss_sprite(sz: float, col: Color, eye_col: Color, bob: float) -> void:
 	# Aura ring
@@ -574,6 +619,20 @@ func _draw_status_icons(sz: float) -> void:
 		var icon_pos := Vector2(start_x + idx * 12.0, base_y)
 		draw_circle(icon_pos, 4.0, Color(0, 0, 0, 0.35))
 		draw_circle(icon_pos, 3.0, icons[idx])
+
+func _draw_elite_crown(sz: float) -> void:
+	var crown_y := -sz * 1.08
+	var crown := PackedVector2Array([
+		Vector2(-sz * 0.34, crown_y + sz * 0.16),
+		Vector2(-sz * 0.26, crown_y - sz * 0.10),
+		Vector2(-sz * 0.08, crown_y + sz * 0.04),
+		Vector2(0, crown_y - sz * 0.14),
+		Vector2(sz * 0.08, crown_y + sz * 0.04),
+		Vector2(sz * 0.26, crown_y - sz * 0.10),
+		Vector2(sz * 0.34, crown_y + sz * 0.16),
+	])
+	draw_colored_polygon(crown, Color(0.98, 0.82, 0.22, 0.92))
+	draw_polyline(crown, Color(0.54, 0.38, 0.10, 0.92), 1.2, true)
 
 func draw_ellipse_custom(center: Vector2, rx: float, ry: float, col: Color) -> void:
 	var points := PackedVector2Array()
@@ -707,20 +766,8 @@ func _die() -> void:
 	died.emit()
 
 func _spawn_death_particles() -> void:
-	var colors := [Color(1.0, 0.3, 0.1, 0.8), Color(1.0, 0.6, 0.1, 0.6), Color(0.9, 0.9, 0.2, 0.5)]
-	var count: int = 8 if is_boss else 5
-	for i in range(count):
-		var angle := TAU * i / count + randf_range(-0.3, 0.3)
-		var speed := randf_range(60, 120) if is_boss else randf_range(40, 80)
-		var p = ColorRect.new()
-		p.size = Vector2(3, 3) if is_boss else Vector2(2, 2)
-		p.color = colors[i % colors.size()]
-		p.position = Vector2(-1.5, -1.5) if is_boss else Vector2(-1, -1)
-		add_child(p)
-		var tween = create_tween()
-		tween.tween_property(p, "position", Vector2(cos(angle), sin(angle)) * speed * 0.3, 0.4)
-		tween.parallel().tween_property(p, "modulate:a", 0.0, 0.4)
-		tween.tween_callback(p.queue_free)
+	# Disabled square ColorRect particles; they looked like random UI boxes.
+	return
 
 func _reach_base() -> void:
 	if _reached:
@@ -743,28 +790,8 @@ func take_damage(dmg: float, dtype: int, _source: String) -> void:
 		_die()
 
 func _spawn_hit_spark(dtype: int) -> void:
-	var spark_color: Color
-	match dtype:
-		GameData.DamageType.FIRE: spark_color = Color(1.0, 0.4, 0.0, 0.8)
-		GameData.DamageType.ICE: spark_color = Color(0.4, 0.85, 1.0, 0.8)
-		GameData.DamageType.ELECTRIC: spark_color = Color(1.0, 0.9, 0.0, 0.8)
-		GameData.DamageType.POISON: spark_color = Color(0.3, 0.9, 0.2, 0.8)
-		GameData.DamageType.MAGIC: spark_color = Color(0.6, 0.2, 1.0, 0.8)
-		GameData.DamageType.DARK: spark_color = Color(0.5, 0.1, 0.8, 0.8)
-		_: spark_color = Color(1.0, 1.0, 1.0, 0.6)
-	var count: int = 4 if is_boss else 3
-	for i in range(count):
-		var angle := TAU * i / count + randf_range(-0.4, 0.4)
-		var dist := randf_range(8, 15) if is_boss else randf_range(5, 10)
-		var spark = ColorRect.new()
-		spark.size = Vector2(2, 2)
-		spark.color = spark_color
-		spark.position = Vector2(-1, -1)
-		add_child(spark)
-		var tween = create_tween()
-		tween.tween_property(spark, "position", Vector2(cos(angle), sin(angle)) * dist, 0.25)
-		tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.25)
-		tween.tween_callback(spark.queue_free)
+	# Disabled square ColorRect particles; they looked like random UI boxes.
+	return
 
 func is_dead() -> bool:
 	return _dead or _reached

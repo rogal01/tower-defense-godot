@@ -1,2 +1,4 @@
 .godot/
 *.import
+.idea/
+.codex_tmp_frames/

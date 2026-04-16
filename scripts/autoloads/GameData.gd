@@ -146,23 +146,23 @@ var MAPS: Dictionary = {
 # max_level, cost_per_level (diamonds), description, effect_per_level
 
 var SKILLS: Dictionary = {
-	"start_gold":    {max=5,  cost=2, label="Start Gold",      desc="+25g starting gold per level"},
-	"base_hp":       {max=5,  cost=3, label="Base HP",         desc="+20 base HP per level"},
-	"player_damage": {max=5,  cost=2, label="Hero Damage",     desc="+5 hero attack per level"},
-	"player_speed":  {max=5,  cost=2, label="Hero Speed",      desc="+20 hero speed per level"},
-	"player_hp":     {max=5,  cost=3, label="Hero HP",         desc="+25 hero HP per level"},
-	"tower_damage":  {max=5,  cost=4, label="Tower Damage",    desc="+8% tower damage per level"},
-	"gold_bonus":    {max=5,  cost=3, label="Gold Bonus",      desc="+10% gold income per level"},
-	"diamond_luck":  {max=3,  cost=5, label="Diamond Luck",    desc="+2% diamond drop chance per level"},
-	"wave_bonus":    {max=5,  cost=3, label="Wave Bonus",      desc="+15 wave completion gold per level"},
-	"attack_range":  {max=3,  cost=4, label="Hero Range",      desc="+30 hero attack range per level"},
+	"start_gold":    {max=5, cost=3, base_cost=3, step_cost=2, label="Start Gold",      desc="+25g starting gold per level"},
+	"base_hp":       {max=5, cost=4, base_cost=4, step_cost=3, label="Base HP",         desc="+20 base HP per level"},
+	"player_damage": {max=5, cost=5, base_cost=5, step_cost=3, label="Hero Damage",     desc="+5 hero attack per level"},
+	"player_speed":  {max=5, cost=3, base_cost=3, step_cost=2, label="Hero Speed",      desc="+20 hero speed per level"},
+	"player_hp":     {max=5, cost=4, base_cost=4, step_cost=3, label="Hero HP",         desc="+25 hero HP per level"},
+	"tower_damage":  {max=5, cost=6, base_cost=6, step_cost=4, label="Tower Damage",    desc="+8% tower damage per level"},
+	"gold_bonus":    {max=5, cost=5, base_cost=5, step_cost=3, label="Gold Bonus",      desc="+10% gold income per level"},
+	"diamond_luck":  {max=3, cost=8, base_cost=8, step_cost=6, label="Diamond Luck",    desc="+2% diamond drop chance per level"},
+	"wave_bonus":    {max=5, cost=4, base_cost=4, step_cost=3, label="Wave Bonus",      desc="+15 wave completion gold per level"},
+	"attack_range":  {max=4, cost=5, base_cost=5, step_cost=4, label="Hero Range",      desc="+30 hero attack range per level"},
 	# Prestige
-	"ice_power":     {max=3,  cost=6, label="Ice Power",       desc="+15% ice slow effect per level"},
-	"ability_cd":    {max=5,  cost=5, label="Ability CD",      desc="-5% tower ability cooldown per level"},
-	"sell_bonus":    {max=3,  cost=4, label="Sell Bonus",      desc="+10% tower sell value per level"},
-	"resist_pierce": {max=3,  cost=7, label="Resist Pierce",   desc="-10% enemy resistance per level"},
-	"wave_modifier": {max=3,  cost=6, label="Wave Modifier",   desc="+1 modifier chance per level"},
-	"prestige_gold": {max=3,  cost=5, label="Prestige Gold",   desc="+50g starting gold in prestige"},
+	"ice_power":     {max=5, cost=6, base_cost=6, step_cost=4, label="Ice Power",       desc="+15% ice slow effect per level"},
+	"ability_cd":    {max=5, cost=5, base_cost=5, step_cost=3, label="Ability CD",      desc="-5% tower ability cooldown per level"},
+	"sell_bonus":    {max=5, cost=4, base_cost=4, step_cost=2, label="Sell Bonus",      desc="+10% tower sell value per level"},
+	"resist_pierce": {max=5, cost=7, base_cost=7, step_cost=5, label="Resist Pierce",   desc="-10% enemy resistance per level"},
+	"wave_modifier": {max=3, cost=8, base_cost=8, step_cost=6, label="Wave Modifier",   desc="+1 modifier chance per level"},
+	"prestige_gold": {max=5, cost=5, base_cost=5, step_cost=4, label="Prestige Gold",   desc="+50g starting gold in prestige"},
 }
 
 # ─── Wave Modifier Descriptions ───────────────────────────────────────────────

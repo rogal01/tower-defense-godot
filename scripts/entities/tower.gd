@@ -12,6 +12,10 @@ var fire_rate: float = 1.2     # shots per second
 var damage_type: int = GameData.DamageType.PHYSICAL
 var ability_cooldown: float = 25.0
 var level: int = 1
+var target_mode: int = GameData.TargetMode.FIRST
+var branch: int = 0
+var branch_name: String = "Core"
+var branching_enabled: bool = false
 
 var fire_timer: float = 0.0    # time until next shot (seconds)
 var ability_timer: float = 0.0
@@ -23,11 +27,14 @@ var _anim_time: float = 0.0
 var _shoot_flash: float = 0.0
 var _recoil: float = 0.0
 var _aim_dir: Vector2 = Vector2.UP
+var synergy_stacks: int = 0
+var synergy_mult: float = 1.0
 
 # Projectile scene reference (passed from game)
 var _proj_scene: PackedScene = null
 
 const MAX_LEVEL := 10
+const BRANCH_LEVEL := 5
 
 # ─── Color palettes per tower type ────────────────────────────────────────────
 const TOWER_COLORS := {
@@ -57,7 +64,8 @@ func _build_visuals() -> void:
 	level_label.position = Vector2(-15, 16)
 	add_child(level_label)
 
-func setup(ttype: int, tdata: Dictionary, dmg_bonus_mult: float, cd_mult: float) -> void:
+func setup(ttype: int, tdata: Dictionary, dmg_bonus_mult: float, cd_mult: float,
+		initial_target_mode: int = GameData.TargetMode.FIRST, enable_branching: bool = false) -> void:
 	tower_type = ttype
 	damage = tdata["dmg"] * dmg_bonus_mult
 	attack_range = tdata["range"]
@@ -65,6 +73,12 @@ func setup(ttype: int, tdata: Dictionary, dmg_bonus_mult: float, cd_mult: float)
 	damage_type = tdata["dtype"]
 	ability_cooldown = tdata["cd"] * cd_mult
 	level = 1
+	target_mode = initial_target_mode
+	branch = 0
+	branch_name = "Core"
+	branching_enabled = enable_branching
+	synergy_stacks = 0
+	synergy_mult = 1.0
 	fire_timer = 1.0 / maxf(fire_rate, 0.01)
 	ability_timer = ability_cooldown * 0.5
 
@@ -74,10 +88,10 @@ func setup(ttype: int, tdata: Dictionary, dmg_bonus_mult: float, cd_mult: float)
 func _update_level_label() -> void:
 	if level_label:
 		if level >= MAX_LEVEL:
-			level_label.text = "MAX"
+			level_label.text = "MAX%s" % ("A" if branch == 1 else ("C" if branch == 2 else ""))
 			level_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.0))
 		else:
-			level_label.text = "Lv%d" % level
+			level_label.text = "Lv%d%s" % [level, ("A" if branch == 1 else ("C" if branch == 2 else ""))]
 			level_label.add_theme_color_override("font_color", Color(0.7, 0.9, 1.0, 0.8))
 
 # ─── Animation tick ───────────────────────────────────────────────────────────
@@ -97,11 +111,25 @@ func _draw() -> void:
 	var base_col: Color = colors.base
 	var top_col: Color = colors.top
 	var accent: Color = colors.accent
+	if branch == 1:
+		accent = accent.lightened(0.18)
+	elif branch == 2:
+		accent = accent.lerp(Color(0.62, 0.90, 1.0), 0.35)
 
 	# Level glow ring
 	var glow_alpha: float = 0.1 + level * 0.03 + sin(_anim_time * 1.5) * 0.03
 	var glow_radius: float = 18.0 + level * 0.5
 	draw_arc(Vector2.ZERO, glow_radius, 0, TAU, 32, accent * Color(1, 1, 1, glow_alpha), 2.0 + level * 0.3)
+
+	# Synergy ring: +10% damage per nearby same-type tower (up to 3 stacks).
+	if synergy_stacks > 0:
+		var synergy_alpha := 0.34 + sin(_anim_time * 2.6) * 0.10
+		var synergy_radius := glow_radius + 4.0
+		draw_arc(Vector2.ZERO, synergy_radius, 0, TAU, 40, accent.lightened(0.25) * Color(1, 1, 1, synergy_alpha), 1.8)
+		for idx in range(synergy_stacks):
+			var angle := -PI * 0.5 + idx * TAU / 3.0
+			var pip_pos := Vector2(cos(angle), sin(angle)) * (synergy_radius + 2.0)
+			draw_circle(pip_pos, 2.0, accent.lightened(0.35) * Color(1, 1, 1, 0.84))
 
 	# Range indicator
 	if show_range:
@@ -351,8 +379,9 @@ func _draw_hexagon(center: Vector2, radius: float, col: Color) -> void:
 
 # ─── Tick (called by GameManager) ────────────────────────────────────────────
 
-func tick(dt: float, enemies: Array, _freeze_mult: float, target_mode: int,
+func tick(dt: float, enemies: Array, _freeze_mult: float, target_mode: int, range_mult: float,
 		_dmg_bonus_mult: float, gm: Node) -> void:
+	var effective_range: float = attack_range * range_mult
 
 	# Fire cooldown countdown (unaffected by freeze)
 	if fire_rate > 0 and fire_timer > 0:
@@ -367,7 +396,7 @@ func tick(dt: float, enemies: Array, _freeze_mult: float, target_mode: int,
 	# Ice tower: constant slow aura (no projectile)
 	if tower_type == GameData.TowerType.ICE:
 		for e in enemies:
-			if position.distance_to(e.position) <= attack_range and not e.is_dead():
+			if position.distance_to(e.position) <= effective_range and not e.is_dead():
 				var slow: float = maxf(0.05, 0.5 - (level - 1) * 0.03)
 				if e.ice_slow > slow:
 					e.ice_slow = slow
@@ -380,15 +409,15 @@ func tick(dt: float, enemies: Array, _freeze_mult: float, target_mode: int,
 
 	# Find target and shoot
 	if fire_timer <= 0 and fire_rate > 0:
-		var target := _pick_target(enemies, target_mode)
+		var target := _pick_target(enemies, target_mode, effective_range)
 		if target:
 			_fire_at(target, gm)
 			fire_timer = 1.0 / maxf(fire_rate, 0.01)
 
-func _pick_target(enemies: Array, mode: int) -> Node:
+func _pick_target(enemies: Array, mode: int, range_limit: float) -> Node:
 	var in_range: Array = []
 	for e in enemies:
-		if not e.is_dead() and position.distance_to(e.position) <= attack_range:
+		if not e.is_dead() and position.distance_to(e.position) <= range_limit:
 			in_range.append(e)
 
 	if in_range.is_empty():
@@ -410,6 +439,7 @@ func _pick_target(enemies: Array, mode: int) -> Node:
 func _fire_at(target: Node, gm: Node) -> void:
 	if not gm:
 		return
+	var shot_damage := damage * synergy_mult
 	_aim_dir = (target.position - position).normalized()
 	_shoot_flash = 0.15
 	_recoil = 1.0
@@ -424,7 +454,7 @@ func _fire_at(target: Node, gm: Node) -> void:
 			if not e.is_dead() and position.distance_to(e.position) <= attack_range:
 				targets.append(e)
 		targets.sort_custom(func(a, b): return position.distance_to(a.position) < position.distance_to(b.position))
-		var chain_dmg := damage
+		var chain_dmg := shot_damage
 		for e in targets.slice(0, 3):
 			e.take_damage(chain_dmg, damage_type, "tower_%d" % tower_type)
 			_spawn_projectile_toward(e.position, gm)
@@ -436,30 +466,30 @@ func _fire_at(target: Node, gm: Node) -> void:
 		var splash_range := 80.0
 		for e in gm.enemy_container.get_children():
 			if not e.is_dead() and target.position.distance_to(e.position) <= splash_range:
-				var splash_dmg := damage * (0.6 if e != target else 1.0)
+				var splash_dmg := shot_damage * (0.6 if e != target else 1.0)
 				e.take_damage(splash_dmg, damage_type, "tower_%d" % tower_type)
 		_spawn_projectile_toward(target.position, gm)
 		return
 
 	# Flame: apply burn
 	if tower_type == GameData.TowerType.FLAME:
-		target.take_damage(damage, damage_type, "tower_%d" % tower_type)
+		target.take_damage(shot_damage, damage_type, "tower_%d" % tower_type)
 		target.burn_timer = maxf(target.burn_timer, 3.0)
-		target.burn_dps = damage * 0.3
+		target.burn_dps = shot_damage * 0.3
 		_spawn_projectile_toward(target.position, gm)
 		return
 
 	# Poison: apply DoT
 	if tower_type == GameData.TowerType.POISON:
-		target.take_damage(damage, damage_type, "tower_%d" % tower_type)
+		target.take_damage(shot_damage, damage_type, "tower_%d" % tower_type)
 		target.poison_timer = maxf(target.poison_timer, 4.0)
-		target.poison_dps = damage * 0.4
+		target.poison_dps = shot_damage * 0.4
 		_spawn_projectile_toward(target.position, gm)
 		return
 
 	# Default: single target
 	var resist := GameData.get_resistance(target.enemy_type, damage_type)
-	var actual_dmg := damage * resist
+	var actual_dmg := shot_damage * resist
 	var is_crit: bool = randf() < gm.crit_chance
 	if is_crit:
 		actual_dmg *= 2.0
@@ -513,7 +543,7 @@ func _get_projectile_style() -> String:
 
 # ─── Upgrade ──────────────────────────────────────────────────────────────────
 
-func upgrade(dmg_mult: float, cd_mult: float) -> void:
+func upgrade(dmg_mult: float, cd_mult: float, enable_branching: bool = false) -> void:
 	if level >= MAX_LEVEL:
 		return
 	level += 1
@@ -521,9 +551,33 @@ func upgrade(dmg_mult: float, cd_mult: float) -> void:
 	attack_range *= 1.04
 	fire_rate *= 1.06
 	ability_cooldown = maxf(ability_cooldown * 0.95 * cd_mult, 3.0)
+	if branch == 0 and level >= BRANCH_LEVEL and (enable_branching or branching_enabled):
+		_apply_branch_bonus()
 	fire_timer = 0.0
 	_update_level_label()
 	queue_redraw()
+
+func _apply_branch_bonus() -> void:
+	var utility_towers := [
+		GameData.TowerType.ICE,
+		GameData.TowerType.HEALER,
+		GameData.TowerType.VORTEX,
+		GameData.TowerType.POISON,
+		GameData.TowerType.TESLA,
+	]
+	if tower_type in utility_towers:
+		branch = 2
+		branch_name = "Control"
+		damage *= 1.10
+		attack_range *= 1.18
+		fire_rate *= 1.16
+		ability_cooldown = maxf(ability_cooldown * 0.82, 2.5)
+	else:
+		branch = 1
+		branch_name = "Assault"
+		damage *= 1.27
+		attack_range *= 1.08
+		fire_rate *= 1.05
 
 # ─── Input ────────────────────────────────────────────────────────────────────
 
@@ -538,4 +592,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_show_range(visible_val: bool) -> void:
 	show_range = visible_val
+	queue_redraw()
+
+func set_synergy_stacks(stacks: int) -> void:
+	var clamped := clampi(stacks, 0, 3)
+	if clamped == synergy_stacks:
+		return
+	synergy_stacks = clamped
+	synergy_mult = 1.0 + float(synergy_stacks) * 0.10
 	queue_redraw()

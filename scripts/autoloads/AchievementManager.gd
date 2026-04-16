@@ -20,7 +20,6 @@ const ACHIEVEMENTS: Array = [
 	{id="combo_20",         title="Chain Reaction",    desc="Get a 20x combo",                        emoji="⚡"},
 	{id="combo_30",         title="Unstoppable",       desc="Get a 30x combo",                        emoji="🔥"},
 	{id="combo_50",         title="Godlike",           desc="Get a 50x combo",                        emoji="⚡"},
-	{id="score_10000",      title="Legendary Score",   desc="Reach 10000 score",                      emoji="🥇"},
 	{id="boss_kill",        title="Boss Slayer",       desc="Kill your first boss",                   emoji="🐉"},
 	{id="5_bosses",         title="Boss Buster",       desc="Kill 5 bosses in one run",               emoji="👹"},
 	{id="10_bosses",        title="Boss Legend",       desc="Kill 10 bosses in one run",              emoji="🐲"},
@@ -80,6 +79,17 @@ func reset_run() -> void:
 	_kills_this_run = 0
 	_bosses_killed_this_run = 0
 	_diamonds_this_run = 0
+
+func restore_run_progress(kills: int, bosses: int, diamonds: int, powers_used: Dictionary, ability_types: Array) -> void:
+	_powers_used_this_run.clear()
+	for key in powers_used.keys():
+		_powers_used_this_run[int(key)] = bool(powers_used[key])
+	_ability_types_used.clear()
+	for tower_type in ability_types:
+		_ability_types_used[int(tower_type)] = true
+	_kills_this_run = maxi(0, kills)
+	_bosses_killed_this_run = maxi(0, bosses)
+	_diamonds_this_run = maxi(0, diamonds)
 
 # Main unlock function — also fires signal for banner
 func check(id: String) -> void:

@@ -2,7 +2,7 @@
 # Each level: id, title, emoji, target_wave, starting_gold, map,
 #             towers (Array, empty=all), powers (Array, empty=none allowed),
 #             upgrades (bool), hp/dmg/spd/gold/spawn multipliers,
-#             boss_interval, diamonds, star2, star3, hint
+#             boss_interval, diamonds, star2, star3, fog (bool), hint
 extends Node
 
 var LEVELS: Array = []
@@ -23,17 +23,22 @@ func is_unlocked(id: int) -> bool:
 
 func get_beaten_count() -> int:
 	var count := 0
-	for i in range(1, 41):
-		if SaveManager.is_campaign_beaten(i):
+	for lv in LEVELS:
+		var level_id: int = int(lv.get("id", 0))
+		if SaveManager.is_campaign_beaten(level_id):
 			count += 1
 	return count
 
 func get_three_star_count() -> int:
 	var count := 0
-	for i in range(1, 41):
-		if SaveManager.get_campaign_stars(i) >= 3:
+	for lv in LEVELS:
+		var level_id: int = int(lv.get("id", 0))
+		if SaveManager.get_campaign_stars(level_id) >= 3:
 			count += 1
 	return count
+
+func get_total_levels() -> int:
+	return LEVELS.size()
 
 func _build_levels() -> void:
 	var T  := GameData.TowerType
@@ -226,9 +231,10 @@ func _build_levels() -> void:
 		 hint="Bosses every 3 waves — Volcano is no place for the weak!"},
 
 		# ── Level 27 ─────────────────────────────────────────────────────────
-		{id=27, title="Toxin Tide",        emoji="🧪", target_wave=10, starting_gold=110,
+		{id=27, title="Toxin Tide",        emoji="🧪", target_wave=10, starting_gold=125,
 		 map=M.ENCHANTED,  towers=[T.ARROW, T.POISON, T.FLAME],   powers=AP,
-		 upgrades=true,    hp=1.3, dmg=1.1, spd=1.0, gold=1.1, spawn=1.0,
+		 upgrades=true,    hp=1.22, dmg=1.05, spd=1.0, gold=1.1, spawn=1.08,
+		 dual_base_pattern="adaptive", mini_boss_interval=4, mini_boss_archetypes=["raider", "warlock"],
 		 boss_interval=5,  diamonds=6,  star2=1100, star3=3200,
 		 hint="Burn and poison together — stack your DoT effects!"},
 
@@ -322,4 +328,42 @@ func _build_levels() -> void:
 		 upgrades=true,    hp=1.8, dmg=1.6, spd=1.2, gold=0.7, spawn=1.4,
 		 boss_interval=5,  diamonds=20, star2=5000, star3=12000,
 		 hint="The final test. 25 waves. Brutal everything. Good luck."},
+		{id=41, title="Twin Bastions",     emoji="⚔️", target_wave=18, starting_gold=140,
+		 map=M.CROSSROADS, towers=AT,                              powers=AP,
+		 upgrades=true,    hp=1.28, dmg=1.15, spd=1.08, gold=1.03, spawn=1.18,
+		 dual_base_pattern="crossroads_split", mini_boss_interval=2, mini_boss_archetypes=["juggernaut", "raider", "warlock"],
+		 boss_interval=5,  diamonds=24, star2=6500, star3=15000,
+		 hint="Dual-base defense with constant mini-boss pressure. Branch towers early."},
 	]
+
+	var fog_levels := {
+		15: true,
+		19: true,
+		24: true,
+		29: true,
+		35: true,
+		40: true,
+	}
+	var double_base_levels := {
+		18: true,
+		27: true,
+		33: true,
+		41: true,
+	}
+	var branching_levels := {
+		27: true,
+		41: true,
+	}
+	var mini_boss_intervals := {
+		41: 2,
+	}
+	for lv in LEVELS:
+		var level_id: int = int(lv.get("id", 0))
+		lv["fog"] = bool(lv.get("fog", fog_levels.has(level_id)))
+		lv["double_base"] = bool(lv.get("double_base", double_base_levels.has(level_id)))
+		lv["branching"] = bool(lv.get("branching", branching_levels.has(level_id)))
+		lv["mini_boss_interval"] = int(lv.get("mini_boss_interval", mini_boss_intervals.get(level_id, 0)))
+		if not lv.has("dual_base_pattern"):
+			lv["dual_base_pattern"] = ""
+		if not lv.has("mini_boss_archetypes"):
+			lv["mini_boss_archetypes"] = []
