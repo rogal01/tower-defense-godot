@@ -1,24 +1,36 @@
 # Tower Defense Godot
 
-A mobile-first tower defense prototype built with **Godot 4.3**.
+**The TD Ecosystem:** [📱 Kotlin/Android (Flagship)](https://github.com/rogal01/tower-defense-android) | [🎮 Godot (Fast Iteration)](https://github.com/rogal01/tower-defense-godot) | [⚙️ Unity (Code-First)](https://github.com/rogal01/tower-defense-unity-port)
 
-This project focuses on gameplay flow, UI clarity, and fast iteration. Compared with the Kotlin Multiplatform version, this repo is lighter and more engine-driven, which makes it useful for experimenting with combat feel, onboarding, HUD polish, and content pacing inside Godot.
+A mobile-first tower defense project built with **Godot 4.3** and focused on gameplay flow, UI clarity, and fast iteration.
+
+Compared with the Kotlin Multiplatform flagship, this version is more engine-driven and lightweight. That makes it a strong portfolio piece for showing how I approach prototyping, onboarding, HUD polish, and gameplay feel inside a modern engine workflow.
+
+> Portfolio note: add a short gameplay GIF or 2-3 screenshots near the top before making the repo public.
+
+## Why This Matters To Clients
+
+- It shows that I can move quickly inside a game engine without losing project structure.
+- It demonstrates fast iteration on user-facing systems like menus, HUD flow, tutorials, and save progression.
+- It proves I can adapt the same product idea to a different engine and a different development style.
+- It translates well to clients who need a playable prototype, stronger UX, or a rapid gameplay validation cycle.
 
 ## Highlights
 
-- Campaign progression with save support
-- Wave previews, boss warnings, and terrain alerts
-- First-run tutorial overlay and polished HUD flow
+- campaign progression with save support
+- wave previews, boss warnings, and terrain alerts
+- first-run tutorial overlay and polished HUD flow
 - WAV-backed music and sound effects
-- Improved projectile feedback and stronger combat presentation
-- Mobile-oriented menu and interface structure
+- improved projectile feedback and stronger combat presentation
+- mobile-oriented menu and interface structure
 
-## What This Repo Shows
+## Technical Focus
 
 - practical Godot 4 project structure
 - gameplay iteration in an engine-first workflow
-- UI/HUD polish work for mobile-friendly interaction
-- save/progression systems through autoloads and scene composition
+- UI and HUD polish for mobile-friendly interaction
+- save and progression systems through autoloads and scene composition
+- clearer onboarding and first-run user experience
 
 ## Project Structure
 
@@ -38,13 +50,27 @@ scripts/ui/            # menus, HUD, pause, tutorial, and game-over UI
 
 The game starts from `res://scenes/main_menu.tscn`.
 
-## Current Focus Areas
+## Why This Version Exists
 
-- campaign progression and save flow
+Within the tower-defense ecosystem, the Godot version is the **fast-iteration build**. It is useful for exploring:
+
 - combat readability and feedback
 - mobile-first HUD and menu usability
 - tutorial onboarding and first-run experience
+- faster gameplay adjustments inside an engine-centered workflow
 
-## Why It Belongs in the Portfolio
+## Engineering Takeaways
 
-This repository complements the larger tower-defense projects by showing the same genre through a different engine and development style. It helps demonstrate that I can adapt the same product space across multiple technology stacks, not just build one implementation.
+- scene-driven architecture balanced with reusable script structure
+- autoload-based state management for save and progression flows
+- gameplay/UI iteration with a strong focus on clarity and feel
+- adaptation of the same genre space across different technical constraints
+
+## Part Of The Multi-Engine Ecosystem
+
+This repository complements:
+
+- the **Kotlin/Android flagship**, which emphasizes cross-platform native architecture
+- the **Unity port**, which emphasizes code-first runtime bootstrap and maintainable systems structure
+
+Together, the three versions demonstrate that I can learn frameworks quickly, separate core gameplay concerns from delivery layers, and choose different architectures depending on the product goals.
