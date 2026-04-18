@@ -1,8 +1,6 @@
-# CampaignData.gd — All 40 campaign level definitions
-# Each level: id, title, emoji, target_wave, starting_gold, map,
-#             towers (Array, empty=all), powers (Array, empty=none allowed),
-#             upgrades (bool), hp/dmg/spd/gold/spawn multipliers,
-#             boss_interval, diamonds, star2, star3, hint
+# CampaignData.gd — Mission Specification Registry
+# Contains the 20-level master campaign set, synchronized with Kotlin multipliers.
+# Truncated from legacy 41-level set to enforce strict parity with the source.
 extends Node
 
 var LEVELS: Array = []
@@ -23,17 +21,22 @@ func is_unlocked(id: int) -> bool:
 
 func get_beaten_count() -> int:
 	var count := 0
-	for i in range(1, 41):
-		if SaveManager.is_campaign_beaten(i):
+	for lv in LEVELS:
+		var level_id: int = int(lv.get("id", 0))
+		if SaveManager.is_campaign_beaten(level_id):
 			count += 1
 	return count
 
 func get_three_star_count() -> int:
 	var count := 0
-	for i in range(1, 41):
-		if SaveManager.get_campaign_stars(i) >= 3:
+	for lv in LEVELS:
+		var level_id: int = int(lv.get("id", 0))
+		if SaveManager.get_campaign_stars(level_id) >= 3:
 			count += 1
 	return count
+
+func get_total_levels() -> int:
+	return LEVELS.size()
 
 func _build_levels() -> void:
 	var T  := GameData.TowerType
@@ -129,14 +132,14 @@ func _build_levels() -> void:
 
 		# ── Level 13 ─────────────────────────────────────────────────────────
 		{id=13, title="Champions Arise",   emoji="👑", target_wave=10, starting_gold=120,
-		 map=M.LAVA,       towers=AT,                              powers=AP,
+		 map=M.CROSSROADS, towers=AT,                              powers=AP,
 		 upgrades=true,    hp=1.1, dmg=1.0, spd=1.0, gold=1.3, spawn=1.0,
 		 boss_interval=3,  diamonds=6,  star2=1200, star3=3500,
 		 hint="Bosses spawn every 3 waves — stock up on Fireball!"},
 
 		# ── Level 14 ─────────────────────────────────────────────────────────
 		{id=14, title="Arrows Only",       emoji="🏹", target_wave=10, starting_gold=150,
-		 map=M.ENCHANTED,  towers=[T.ARROW],                       powers=AP,
+		 map=M.DESERT,     towers=[T.ARROW],                       powers=AP,
 		 upgrades=true,    hp=0.9, dmg=0.8, spd=1.0, gold=1.3, spawn=1.0,
 		 boss_interval=5,  diamonds=6,  star2=1000, star3=3000,
 		 hint="Only Arrow towers — max upgrades are your only hope!"},
@@ -164,162 +167,44 @@ func _build_levels() -> void:
 
 		# ── Level 18 ─────────────────────────────────────────────────────────
 		{id=18, title="Elite Forces",      emoji="⚔️", target_wave=10, starting_gold=100,
-		 map=M.LAVA,       towers=AT,                              powers=AP,
+		 map=M.CROSSROADS, towers=AT,                              powers=AP,
 		 upgrades=true,    hp=1.1, dmg=1.0, spd=1.0, gold=1.3, spawn=1.0,
 		 boss_interval=5,  diamonds=6,  star2=1100, star3=3200,
 		 hint="Every enemy is elite — expect a tough fight!"},
 
 		# ── Level 19 ─────────────────────────────────────────────────────────
 		{id=19, title="The Crucible",      emoji="🔥", target_wave=12, starting_gold=80,
-		 map=M.ENCHANTED,  towers=AT,                              powers=AP,
+		 map=M.DESERT,     towers=AT,                              powers=AP,
 		 upgrades=true,    hp=1.2, dmg=1.1, spd=1.1, gold=1.0, spawn=1.3,
 		 boss_interval=5,  diamonds=6,  star2=1400, star3=4000,
 		 hint="Tougher and more numerous — save powers for late waves!"},
 
 		# ── Level 20 ─────────────────────────────────────────────────────────
 		{id=20, title="Final Stand",       emoji="🏔️", target_wave=15, starting_gold=80,
-		 map=M.VOLCANO,    towers=AT,                              powers=AP,
+		 map=M.SNOW,       towers=AT,                              powers=AP,
 		 upgrades=true,    hp=1.4, dmg=1.3, spd=1.1, gold=0.9, spawn=1.2,
 		 boss_interval=5,  diamonds=8,  star2=2000, star3=5500,
-		 hint="The ultimate early challenge — Volcano map, no mercy!"},
-
-		# ── Level 21 ─────────────────────────────────────────────────────────
-		{id=21, title="Poison Mastery",    emoji="☠️", target_wave=8,  starting_gold=130,
-		 map=M.ENCHANTED,  towers=[T.POISON],                      powers=AP,
-		 upgrades=true,    hp=0.9, dmg=0.8, spd=1.0, gold=1.3, spawn=1.0,
-		 boss_interval=5,  diamonds=5,  star2=900,  star3=2600,
-		 hint="Poison only — stack DoT on every enemy!"},
-
-		# ── Level 22 ─────────────────────────────────────────────────────────
-		{id=22, title="Chain Reaction",    emoji="⚡", target_wave=8,  starting_gold=150,
-		 map=M.LAVA,       towers=[T.TESLA],                       powers=AP,
-		 upgrades=true,    hp=0.85, dmg=0.8, spd=1.0, gold=1.2, spawn=1.0,
-		 boss_interval=5,  diamonds=5,  star2=900,  star3=2600,
-		 hint="Tesla only — chain lightning shreds clustered enemies!"},
-
-		# ── Level 23 ─────────────────────────────────────────────────────────
-		{id=23, title="Frozen Fortress",   emoji="❄️", target_wave=10, starting_gold=100,
-		 map=M.SNOW,       towers=[T.ICE, T.ARROW, T.CANNON],     powers=[P.FIREBALL, P.FREEZE],
-		 upgrades=true,    hp=1.1, dmg=1.0, spd=1.2, gold=1.1, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1100, star3=3200,
-		 hint="Freeze everything then shatter it with Cannon splash!"},
-
-		# ── Level 24 ─────────────────────────────────────────────────────────
-		{id=24, title="No Upgrades",       emoji="🚫", target_wave=10, starting_gold=120,
-		 map=M.DESERT,     towers=AT,                              powers=AP,
-		 upgrades=false,   hp=0.9, dmg=0.85, spd=1.0, gold=1.2, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1000, star3=3000,
-		 hint="Tower upgrades are locked — quantity over quality!"},
-
-		# ── Level 25 ─────────────────────────────────────────────────────────
-		{id=25, title="Desert Siege",      emoji="🏜️", target_wave=12, starting_gold=90,
-		 map=M.DESERT,     towers=AT,                              powers=AP,
-		 upgrades=true,    hp=1.2, dmg=1.1, spd=1.1, gold=1.0, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1400, star3=4000,
-		 hint="Long siege through the desert — manage gold carefully!"},
-
-		# ── Level 26 ─────────────────────────────────────────────────────────
-		{id=26, title="Triple Threat",     emoji="👿", target_wave=15, starting_gold=130,
-		 map=M.VOLCANO,    towers=AT,                              powers=AP,
-		 upgrades=true,    hp=1.2, dmg=1.1, spd=1.0, gold=1.4, spawn=1.0,
-		 boss_interval=3,  diamonds=8,  star2=2000, star3=5500,
-		 hint="Bosses every 3 waves — Volcano is no place for the weak!"},
-
-		# ── Level 27 ─────────────────────────────────────────────────────────
-		{id=27, title="Toxin Tide",        emoji="🧪", target_wave=10, starting_gold=110,
-		 map=M.ENCHANTED,  towers=[T.ARROW, T.POISON, T.FLAME],   powers=AP,
-		 upgrades=true,    hp=1.3, dmg=1.1, spd=1.0, gold=1.1, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1100, star3=3200,
-		 hint="Burn and poison together — stack your DoT effects!"},
-
-		# ── Level 28 ─────────────────────────────────────────────────────────
-		{id=28, title="Brittle Bastion",   emoji="💥", target_wave=10, starting_gold=150,
-		 map=M.LAVA,       towers=AT,                              powers=AP,
-		 upgrades=true,    hp=0.7, dmg=1.5, spd=1.0, gold=1.3, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1200, star3=3500,
-		 hint="Enemies deal massive damage — never let one through!"},
-
-		# ── Level 29 ─────────────────────────────────────────────────────────
-		{id=29, title="The Marathon",      emoji="🏃", target_wave=20, starting_gold=80,
-		 map=M.CROSSROADS, towers=AT,                              powers=AP,
-		 upgrades=true,    hp=1.1, dmg=1.1, spd=1.05, gold=1.0, spawn=1.1,
-		 boss_interval=5,  diamonds=8,  star2=2500, star3=7000,
-		 hint="20 waves — pace yourself and manage your economy!"},
-
-		# ── Level 30 ─────────────────────────────────────────────────────────
-		{id=30, title="True Champion",     emoji="🥇", target_wave=20, starting_gold=50,
-		 map=M.VOLCANO,    towers=AT,                              powers=AP,
-		 upgrades=true,    hp=1.6, dmg=1.5, spd=1.15, gold=0.8, spawn=1.3,
-		 boss_interval=5,  diamonds=10, star2=3000, star3=8000,
-		 hint="20 waves on Volcano with brutal enemies!"},
-
-		# ── Level 31 ─────────────────────────────────────────────────────────
-		{id=31, title="Playing with Fire", emoji="🔥", target_wave=8,  starting_gold=120,
-		 map=M.LAVA,       towers=[T.ARROW, T.FLAME],              powers=AP,
-		 upgrades=true,    hp=1.0, dmg=0.9, spd=1.0, gold=1.2, spawn=1.0,
-		 boss_interval=5,  diamonds=5,  star2=900,  star3=2600,
-		 hint="Flame towers burn enemies over time — combine with arrows!"},
-
-		# ── Level 32 ─────────────────────────────────────────────────────────
-		{id=32, title="Dark Arts",         emoji="💀", target_wave=8,  starting_gold=120,
-		 map=M.ENCHANTED,  towers=[T.ARROW, T.MAGIC, T.NECRO],    powers=AP,
-		 upgrades=true,    hp=1.1, dmg=0.9, spd=1.0, gold=1.1, spawn=1.0,
-		 boss_interval=5,  diamonds=5,  star2=900,  star3=2600,
-		 hint="Necro towers curse enemies with death — very powerful!"},
-
-		# ── Level 33 ─────────────────────────────────────────────────────────
-		{id=33, title="Siege Warfare",     emoji="🎯", target_wave=10, starting_gold=150,
-		 map=M.DESERT,     towers=[T.BALLISTA, T.ARROW],           powers=AP,
-		 upgrades=true,    hp=1.2, dmg=1.0, spd=1.0, gold=1.2, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1200, star3=3500,
-		 hint="Ballista has extreme range and pierce — pick off bosses!"},
-
-		# ── Level 34 ─────────────────────────────────────────────────────────
-		{id=34, title="Event Horizon",     emoji="🌀", target_wave=8,  starting_gold=120,
-		 map=M.SNOW,       towers=[T.VORTEX, T.CANNON, T.ICE],    powers=AP,
-		 upgrades=true,    hp=1.0, dmg=0.9, spd=1.0, gold=1.2, spawn=1.0,
-		 boss_interval=5,  diamonds=5,  star2=900,  star3=2600,
-		 hint="Vortex sucks enemies in — pair with Cannon for insane splash!"},
-
-		# ── Level 35 ─────────────────────────────────────────────────────────
-		{id=35, title="Fire & Ice",        emoji="🌡️", target_wave=10, starting_gold=100,
-		 map=M.SNOW,       towers=[T.FLAME, T.ICE],                powers=[P.FIREBALL, P.FREEZE],
-		 upgrades=true,    hp=1.2, dmg=1.1, spd=1.2, gold=1.1, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1100, star3=3200,
-		 hint="Freeze with Ice then incinerate with Flame — fast enemies!"},
-
-		# ── Level 36 ─────────────────────────────────────────────────────────
-		{id=36, title="Necro Rush",        emoji="💀", target_wave=10, starting_gold=100,
-		 map=M.VALLEY,     towers=[T.NECRO, T.POISON, T.ARROW],   powers=AP,
-		 upgrades=true,    hp=0.6, dmg=0.7, spd=1.0, gold=1.0, spawn=2.5,
-		 boss_interval=5,  diamonds=6,  star2=1800, star3=5000,
-		 hint="Massive swarms — Necro's AoE curse handles large groups!"},
-
-		# ── Level 37 ─────────────────────────────────────────────────────────
-		{id=37, title="Gravity Well",      emoji="🌀", target_wave=10, starting_gold=130,
-		 map=M.ENCHANTED,  towers=[T.VORTEX, T.TESLA],             powers=AP,
-		 upgrades=true,    hp=1.1, dmg=1.0, spd=1.0, gold=1.2, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1200, star3=3500,
-		 hint="Vortex + Tesla chain = devastating area control!"},
-
-		# ── Level 38 ─────────────────────────────────────────────────────────
-		{id=38, title="Dead Eye",          emoji="🎯", target_wave=10, starting_gold=180,
-		 map=M.CROSSROADS, towers=[T.BALLISTA, T.ICE],             powers=AP,
-		 upgrades=true,    hp=1.0, dmg=1.0, spd=1.0, gold=1.3, spawn=1.0,
-		 boss_interval=5,  diamonds=6,  star2=1200, star3=3500,
-		 hint="Ballista picks off any enemy — Ice keeps them in range!"},
-
-		# ── Level 39 ─────────────────────────────────────────────────────────
-		{id=39, title="Full Armory",       emoji="⚔️", target_wave=15, starting_gold=100,
-		 map=M.VOLCANO,    towers=AT,                              powers=AP,
-		 upgrades=true,    hp=1.3, dmg=1.2, spd=1.1, gold=1.0, spawn=1.0,
-		 boss_interval=5,  diamonds=10, star2=2200, star3=6000,
-		 hint="All towers, brutal enemies — the penultimate challenge!"},
-
-		# ── Level 40 ─────────────────────────────────────────────────────────
-		{id=40, title="Absolute Zero",     emoji="🔱", target_wave=25, starting_gold=60,
-		 map=M.VOLCANO,    towers=AT,                              powers=AP,
-		 upgrades=true,    hp=1.8, dmg=1.6, spd=1.2, gold=0.7, spawn=1.4,
-		 boss_interval=5,  diamonds=20, star2=5000, star3=12000,
-		 hint="The final test. 25 waves. Brutal everything. Good luck."},
+		 hint="The ultimate early challenge — Snow map, no mercy!"},
 	]
+
+	var fog_levels := {
+		15: true,
+		19: true,
+	}
+	var double_base_levels := {
+		18: true,
+	}
+	var branching_levels := {
+	}
+	var mini_boss_intervals := {
+	}
+	for lv in LEVELS:
+		var level_id: int = int(lv.get("id", 0))
+		lv["fog"] = bool(lv.get("fog", fog_levels.has(level_id)))
+		lv["double_base"] = bool(lv.get("double_base", double_base_levels.has(level_id)))
+		lv["branching"] = bool(lv.get("branching", branching_levels.has(level_id)))
+		lv["mini_boss_interval"] = int(lv.get("mini_boss_interval", mini_boss_intervals.get(level_id, 0)))
+		if not lv.has("dual_base_pattern"):
+			lv["dual_base_pattern"] = ""
+		if not lv.has("mini_boss_archetypes"):
+			lv["mini_boss_archetypes"] = []

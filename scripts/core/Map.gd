@@ -5,20 +5,24 @@ const SCREEN_SIZE := Vector2(480, 854)
 var paths: Array = []
 var map_type: int = GameData.MapType.CLASSIC
 var base_position: Vector2 = Vector2(240, 726)
+var double_base_active: bool = false
+var secondary_base_position: Vector2 = Vector2(336, 726)
 var terrain_zones: Array = []
+var fog_of_war_active: bool = false
+var fog_base_reveal_radius: float = 170.0
+var fog_tower_reveal_mult: float = 0.9
+var night_mode_active: bool = false
 
 var _anim_time: float = 0.0
 var _decorations: Array = []
-var _build_points: Array = []
-var _stars: Array = []
+var _ambient_particles: Array = []
 
 func _ready() -> void:
 	refresh_layout()
 
 func refresh_layout() -> void:
 	_generate_decorations()
-	_generate_build_points()
-	_generate_sky_particles()
+	_generate_ambient_particles()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -27,51 +31,46 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var map_data := GameData.get_map(map_type)
-	_draw_background(map_data["bg_color"])
+	_draw_background(map_data)
 	_draw_terrain_zones()
-	_draw_paths(map_data["path_color"])
+	_draw_paths(map_data.get("path_color", Color(0.48, 0.36, 0.20)))
 	_draw_decorations()
-	_draw_build_points()
 	_draw_base()
 	_draw_spawn_markers()
+	_draw_foreground_haze()
+	_draw_fog_of_war()
 
 func _generate_decorations() -> void:
 	_decorations.clear()
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 9000 + map_type * 31
-	for _i in range(48):
-		var pos := Vector2(rng.randf_range(18.0, 462.0), rng.randf_range(88.0, 740.0))
-		if _point_blocked(pos, 32.0):
+	rng.seed = 9401 + map_type * 79
+	for _i in range(54):
+		var pos := Vector2(rng.randf_range(18.0, 462.0), rng.randf_range(90.0, 758.0))
+		if _point_blocked(pos, 34.0):
 			continue
 		_decorations.append({
 			"pos": pos,
 			"type": rng.randi_range(0, 2),
-			"scale": rng.randf_range(0.7, 1.3),
-			"phase": rng.randf() * TAU
+			"scale": rng.randf_range(0.65, 1.35),
+			"phase": rng.randf() * TAU,
 		})
 
-func _generate_build_points() -> void:
-	_build_points.clear()
-	for x in range(40, 441, 40):
-		for y in range(120, 721, 40):
-			var pos := Vector2(x, y)
-			if not _point_blocked(pos, 48.0):
-				_build_points.append(pos)
-
-func _generate_sky_particles() -> void:
-	_stars.clear()
+func _generate_ambient_particles() -> void:
+	_ambient_particles.clear()
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 400 + map_type * 17
-	for _i in range(22):
-		_stars.append({
-			"pos": Vector2(rng.randf_range(0.0, 480.0), rng.randf_range(0.0, 180.0)),
-			"size": rng.randf_range(1.0, 2.6),
+	rng.seed = 501 + map_type * 13
+	for _i in range(28):
+		_ambient_particles.append({
+			"pos": Vector2(rng.randf_range(0.0, 480.0), rng.randf_range(0.0, 320.0)),
+			"size": rng.randf_range(1.2, 3.0),
 			"phase": rng.randf() * TAU,
-			"speed": rng.randf_range(0.3, 1.2)
+			"speed": rng.randf_range(0.3, 1.2),
 		})
 
 func _point_blocked(pos: Vector2, radius: float) -> bool:
-	if pos.distance_to(base_position) < 64.0:
+	if pos.distance_to(base_position) < 66.0:
+		return true
+	if double_base_active and pos.distance_to(secondary_base_position) < 66.0:
 		return true
 	for path in paths:
 		for idx in range(path.size() - 1):
@@ -80,50 +79,88 @@ func _point_blocked(pos: Vector2, radius: float) -> bool:
 				return true
 	return false
 
-func _draw_background(base_color: Color) -> void:
-	var top_color := base_color.lightened(0.18)
-	var bottom_color := base_color.darkened(0.18)
-	for y in range(0, 854, 4):
+func _draw_background(map_data: Dictionary) -> void:
+	var base_color: Color = map_data.get("bg_color", Color(0.10, 0.18, 0.10))
+	var sky_top := base_color.lightened(0.18)
+	var sky_mid := base_color.lightened(0.04)
+	var sky_bottom := base_color.darkened(0.22)
+	if night_mode_active:
+		sky_top = sky_top.darkened(0.55)
+		sky_mid = sky_mid.darkened(0.60)
+		sky_bottom = sky_bottom.darkened(0.62)
+		base_color = base_color.darkened(0.45)
+	for y in range(0, 854, 3):
 		var t := float(y) / 854.0
-		draw_rect(Rect2(0, y, 480, 4), top_color.lerp(bottom_color, t))
+		var mix_a := sky_top.lerp(sky_mid, minf(t * 1.3, 1.0))
+		draw_rect(Rect2(0, y, 480, 3), mix_a.lerp(sky_bottom, pow(t, 1.7)))
 
-	var horizon := 250.0
+	var glow_color := Color(0.90, 0.78, 0.42, 0.12)
+	match map_type:
+		GameData.MapType.SNOW:
+			glow_color = Color(0.84, 0.90, 1.0, 0.18)
+		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
+			glow_color = Color(1.0, 0.38, 0.10, 0.18)
+		GameData.MapType.ENCHANTED:
+			glow_color = Color(0.70, 0.40, 0.96, 0.18)
+	if night_mode_active:
+		glow_color = Color(0.72, 0.82, 1.0, 0.14)
+	draw_circle(Vector2(392, 118), 84.0, glow_color)
+	draw_circle(Vector2(392, 118), 52.0, glow_color * Color(1, 1, 1, 1.25))
+	if night_mode_active:
+		draw_circle(Vector2(388, 112), 28.0, Color(0.92, 0.96, 1.0, 0.42))
+		for idx in range(32):
+			var s := float(idx)
+			var sx := fmod(28.0 + s * 37.0, 476.0) + 2.0
+			var sy := fmod(14.0 + s * 53.0, 308.0) + 8.0
+			var twinkle := 0.18 + 0.28 * (0.5 + 0.5 * sin(_anim_time * 2.0 + s))
+			draw_circle(Vector2(sx, sy), 1.1 + fmod(s, 3.0) * 0.35, Color(0.84, 0.92, 1.0, twinkle))
+
 	draw_colored_polygon([
-		Vector2(0, horizon + 32),
-		Vector2(64, horizon - 16),
-		Vector2(148, horizon + 20),
-		Vector2(244, horizon - 34),
-		Vector2(340, horizon + 26),
-		Vector2(430, horizon - 10),
-		Vector2(480, horizon + 24),
+		Vector2(0, 262),
+		Vector2(72, 206),
+		Vector2(138, 240),
+		Vector2(214, 182),
+		Vector2(288, 242),
+		Vector2(354, 218),
+		Vector2(430, 248),
+		Vector2(480, 228),
 		Vector2(480, 854),
 		Vector2(0, 854),
 	], base_color.darkened(0.08))
 
 	draw_colored_polygon([
-		Vector2(0, horizon + 96),
-		Vector2(80, horizon + 54),
-		Vector2(176, horizon + 90),
-		Vector2(272, horizon + 38),
-		Vector2(382, horizon + 88),
-		Vector2(480, horizon + 64),
+		Vector2(0, 344),
+		Vector2(88, 308),
+		Vector2(164, 362),
+		Vector2(250, 298),
+		Vector2(334, 354),
+		Vector2(398, 330),
+		Vector2(480, 366),
 		Vector2(480, 854),
 		Vector2(0, 854),
 	], base_color.darkened(0.15))
 
+	for particle in _ambient_particles:
+		var alpha := 0.10 + 0.18 * (0.5 + 0.5 * sin(_anim_time * particle["speed"] + particle["phase"]))
+		var color := Color(0.82, 0.92, 1.0, alpha)
+		match map_type:
+			GameData.MapType.DESERT:
+				color = Color(1.0, 0.88, 0.60, alpha * 0.8)
+			GameData.MapType.ENCHANTED:
+				color = Color(0.78, 0.62, 1.0, alpha * 1.2)
+			GameData.MapType.LAVA, GameData.MapType.VOLCANO:
+				color = Color(1.0, 0.54, 0.24, alpha * 0.9)
+		draw_circle(particle["pos"], particle["size"], color)
+
 	match map_type:
 		GameData.MapType.SNOW:
-			draw_rect(Rect2(0, 690, 480, 164), Color(0.88, 0.92, 0.96, 0.12))
+			draw_rect(Rect2(0, 662, 480, 192), Color(0.92, 0.96, 1.0, 0.10))
 		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			draw_rect(Rect2(0, 0, 480, 854), Color(0.18, 0.04, 0.0, 0.12))
-		GameData.MapType.ENCHANTED:
-			for star in _stars:
-				var glow := 0.25 + 0.25 * (0.5 + 0.5 * sin(_anim_time * star["speed"] + star["phase"]))
-				draw_circle(star["pos"], star["size"], Color(0.75, 0.55, 1.0, glow))
-		_:
-			for star in _stars:
-				var glow := 0.12 + 0.12 * (0.5 + 0.5 * sin(_anim_time * star["speed"] + star["phase"]))
-				draw_circle(star["pos"], star["size"], Color(1, 1, 1, glow))
+			draw_rect(Rect2(0, 0, 480, 854), Color(0.18, 0.04, 0.02, 0.14))
+		GameData.MapType.DESERT:
+			draw_rect(Rect2(0, 0, 480, 854), Color(0.32, 0.22, 0.08, 0.08))
+	if night_mode_active:
+		draw_rect(Rect2(0, 0, 480, 854), Color(0.02, 0.04, 0.10, 0.28))
 
 func _draw_terrain_zones() -> void:
 	for zone in terrain_zones:
@@ -131,34 +168,35 @@ func _draw_terrain_zones() -> void:
 		var radius: float = zone.get("radius", 40.0)
 		match zone.get("kind", ""):
 			"frost":
-				draw_circle(center, radius, Color(0.72, 0.9, 1.0, 0.12))
-				draw_arc(center, radius + 3.0, 0.0, TAU, 28, Color(0.8, 0.95, 1.0, 0.28), 2.0)
+				draw_circle(center, radius, Color(0.70, 0.88, 1.0, 0.12))
+				draw_arc(center, radius + 4.0, 0.0, TAU, 28, Color(0.82, 0.96, 1.0, 0.26), 2.0)
+				draw_circle(center, 5.0 + sin(_anim_time * 2.0) * 1.5, Color(1.0, 1.0, 1.0, 0.22))
 			"lava":
-				draw_circle(center, radius, Color(1.0, 0.3, 0.08, 0.12))
-				for idx in range(4):
-					var angle := _anim_time * 0.8 + idx * TAU / 4.0
-					var p1 := center + Vector2(cos(angle), sin(angle)) * radius * 0.4
-					var p2 := center + Vector2(cos(angle + 0.5), sin(angle + 0.5)) * radius * 0.85
-					draw_line(p1, p2, Color(1.0, 0.54, 0.18, 0.5), 2.0)
+				draw_circle(center, radius, Color(1.0, 0.28, 0.08, 0.12))
+				for idx in range(5):
+					var angle := _anim_time * 0.9 + idx * TAU / 5.0
+					var start := center + Vector2(cos(angle), sin(angle)) * radius * 0.28
+					var finish := center + Vector2(cos(angle + 0.3), sin(angle + 0.3)) * radius * 0.86
+					draw_line(start, finish, Color(1.0, 0.56, 0.18, 0.46), 2.0)
 			"arcane":
-				draw_circle(center, radius, Color(0.6, 0.28, 0.95, 0.1))
-				draw_arc(center, radius, _anim_time, _anim_time + TAU, 30, Color(0.72, 0.5, 1.0, 0.38), 2.0)
-				draw_circle(center, 5.0 + sin(_anim_time * 3.0) * 2.0, Color(0.9, 0.75, 1.0, 0.32))
+				draw_circle(center, radius, Color(0.64, 0.26, 0.98, 0.10))
+				draw_arc(center, radius, _anim_time, _anim_time + TAU, 32, Color(0.82, 0.60, 1.0, 0.34), 2.0)
+				draw_arc(center, radius * 0.58, -_anim_time * 1.4, TAU - _anim_time * 1.4, 24, Color(0.96, 0.82, 1.0, 0.28), 1.4)
 			"dune":
-				draw_circle(center, radius, Color(0.95, 0.78, 0.4, 0.08))
+				draw_circle(center, radius, Color(0.96, 0.82, 0.46, 0.08))
 				for offset in [-10.0, 0.0, 10.0]:
-					draw_arc(center + Vector2(0, offset), radius * 0.6, PI * 0.1, PI * 0.9, 18, Color(1.0, 0.88, 0.55, 0.22), 1.5)
+					draw_arc(center + Vector2(0, offset), radius * 0.65, PI * 0.08, PI * 0.92, 18, Color(1.0, 0.90, 0.58, 0.24), 1.6)
 
 func _draw_paths(path_color: Color) -> void:
 	for path in paths:
 		if path.size() < 2:
 			continue
 		for idx in range(path.size() - 1):
-			draw_line(path[idx], path[idx + 1], path_color.darkened(0.38), 30.0, true)
+			draw_line(path[idx], path[idx + 1], path_color.darkened(0.42), 34.0, true)
 		for idx in range(path.size() - 1):
-			draw_line(path[idx], path[idx + 1], path_color.darkened(0.08), 22.0, true)
+			draw_line(path[idx], path[idx + 1], path_color.darkened(0.14), 26.0, true)
 		for idx in range(path.size() - 1):
-			draw_line(path[idx], path[idx + 1], path_color, 16.0, true)
+			draw_line(path[idx], path[idx + 1], path_color, 18.0, true)
 		for idx in range(path.size() - 1):
 			var a: Vector2 = path[idx]
 			var b: Vector2 = path[idx + 1]
@@ -167,9 +205,9 @@ func _draw_paths(path_color: Color) -> void:
 			var offset := 0.0
 			while offset < distance:
 				var dash_start := a + direction * offset
-				var dash_end := a + direction * minf(offset + 10.0, distance)
-				draw_line(dash_start, dash_end, path_color.lightened(0.18) * Color(1, 1, 1, 0.24), 1.2, true)
-				offset += 18.0
+				var dash_end := a + direction * minf(offset + 11.0, distance)
+				draw_line(dash_start, dash_end, path_color.lightened(0.22) * Color(1, 1, 1, 0.24), 1.4, true)
+				offset += 20.0
 
 func _draw_decorations() -> void:
 	for deco in _decorations:
@@ -179,79 +217,76 @@ func _draw_decorations() -> void:
 			0:
 				_draw_tree(pos, scale)
 			1:
-				_draw_stone(pos, scale)
+				_draw_rock(pos, scale)
 			_:
 				_draw_shrub(pos, scale)
 
 func _draw_tree(pos: Vector2, scale: float) -> void:
 	match map_type:
 		GameData.MapType.DESERT:
-			draw_rect(Rect2(pos.x - 3.0 * scale, pos.y - 14.0 * scale, 6.0 * scale, 16.0 * scale), Color(0.24, 0.5, 0.18))
-			draw_line(pos + Vector2(0, -8 * scale), pos + Vector2(10 * scale, -12 * scale), Color(0.24, 0.5, 0.18), 3.0 * scale)
+			draw_line(pos, pos + Vector2(0, -16 * scale), Color(0.40, 0.26, 0.12), 2.6 * scale)
+			draw_line(pos + Vector2(0, -10 * scale), pos + Vector2(9 * scale, -18 * scale), Color(0.42, 0.56, 0.22), 2.4 * scale)
+			draw_line(pos + Vector2(0, -8 * scale), pos + Vector2(-8 * scale, -15 * scale), Color(0.42, 0.56, 0.22), 2.2 * scale)
 		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			draw_line(pos, pos + Vector2(0, -18 * scale), Color(0.22, 0.12, 0.08), 2.5 * scale)
-			draw_line(pos + Vector2(0, -10 * scale), pos + Vector2(7 * scale, -18 * scale), Color(0.22, 0.12, 0.08), 1.5 * scale)
-			draw_line(pos + Vector2(0, -12 * scale), pos + Vector2(-6 * scale, -20 * scale), Color(0.22, 0.12, 0.08), 1.5 * scale)
+			draw_line(pos, pos + Vector2(0, -18 * scale), Color(0.18, 0.12, 0.08), 2.4 * scale)
+			draw_line(pos + Vector2(0, -8 * scale), pos + Vector2(6 * scale, -16 * scale), Color(0.22, 0.14, 0.10), 1.6 * scale)
+			draw_line(pos + Vector2(0, -10 * scale), pos + Vector2(-7 * scale, -19 * scale), Color(0.22, 0.14, 0.10), 1.6 * scale)
 		_:
-			draw_rect(Rect2(pos.x - 2.5 * scale, pos.y - 10.0 * scale, 5.0 * scale, 12.0 * scale), Color(0.42, 0.28, 0.12))
-			var leaves := Color(0.18, 0.5, 0.22)
+			draw_rect(Rect2(pos.x - 2.5 * scale, pos.y - 11.0 * scale, 5.0 * scale, 12.0 * scale), Color(0.42, 0.28, 0.12))
+			var leaves := Color(0.18, 0.52, 0.24)
 			if map_type == GameData.MapType.SNOW:
-				leaves = Color(0.62, 0.78, 0.7)
+				leaves = Color(0.66, 0.80, 0.74)
 			elif map_type == GameData.MapType.ENCHANTED:
-				leaves = Color(0.42, 0.28, 0.62)
-			draw_circle(pos + Vector2(0, -14 * scale), 9.0 * scale, leaves)
-			draw_circle(pos + Vector2(-6 * scale, -10 * scale), 5.0 * scale, leaves.darkened(0.08))
-			draw_circle(pos + Vector2(6 * scale, -10 * scale), 5.0 * scale, leaves.lightened(0.08))
+				leaves = Color(0.42, 0.30, 0.64)
+			draw_circle(pos + Vector2(0, -15 * scale), 9.0 * scale, leaves)
+			draw_circle(pos + Vector2(-6 * scale, -11 * scale), 5.0 * scale, leaves.darkened(0.06))
+			draw_circle(pos + Vector2(6 * scale, -10 * scale), 5.2 * scale, leaves.lightened(0.06))
 
-func _draw_stone(pos: Vector2, scale: float) -> void:
-	var color := Color(0.42, 0.42, 0.45)
+func _draw_rock(pos: Vector2, scale: float) -> void:
+	var color := Color(0.42, 0.42, 0.46)
 	if map_type == GameData.MapType.SNOW:
-		color = Color(0.6, 0.62, 0.68)
+		color = Color(0.68, 0.72, 0.78)
 	elif map_type == GameData.MapType.LAVA or map_type == GameData.MapType.VOLCANO:
-		color = Color(0.34, 0.18, 0.12)
+		color = Color(0.28, 0.16, 0.12)
 	draw_colored_polygon([
-		pos + Vector2(-7, 3) * scale,
-		pos + Vector2(-5, -5) * scale,
-		pos + Vector2(3, -8) * scale,
-		pos + Vector2(8, -2) * scale,
-		pos + Vector2(5, 4) * scale,
+		pos + Vector2(-8, 4) * scale,
+		pos + Vector2(-5, -6) * scale,
+		pos + Vector2(4, -8) * scale,
+		pos + Vector2(9, -2) * scale,
+		pos + Vector2(5, 5) * scale,
 	], color)
 
 func _draw_shrub(pos: Vector2, scale: float) -> void:
-	var color := Color(0.2, 0.46, 0.2)
+	var color := Color(0.20, 0.46, 0.22)
 	if map_type == GameData.MapType.ENCHANTED:
-		color = Color(0.36, 0.24, 0.52)
+		color = Color(0.42, 0.24, 0.58)
 	elif map_type == GameData.MapType.DESERT:
-		color = Color(0.54, 0.46, 0.2)
+		color = Color(0.56, 0.48, 0.22)
 	draw_circle(pos, 6.0 * scale, color)
-	draw_circle(pos + Vector2(-4, -2) * scale, 4.0 * scale, color.lightened(0.06))
-	draw_circle(pos + Vector2(4, -1) * scale, 3.6 * scale, color.darkened(0.06))
-
-func _draw_build_points() -> void:
-	for build_pos in _build_points:
-		var pulse := 0.10 + 0.05 * (0.5 + 0.5 * sin(_anim_time * 2.0 + build_pos.x * 0.02 + build_pos.y * 0.03))
-		var color := Color(0.55, 0.76, 1.0, pulse)
-		draw_colored_polygon([
-			build_pos + Vector2(0, -9),
-			build_pos + Vector2(9, 0),
-			build_pos + Vector2(0, 9),
-			build_pos + Vector2(-9, 0),
-		], color)
-		draw_arc(build_pos, 11.0, 0.0, TAU, 16, Color(0.7, 0.86, 1.0, pulse * 1.4), 1.0)
+	draw_circle(pos + Vector2(-4, -1) * scale, 4.2 * scale, color.lightened(0.05))
+	draw_circle(pos + Vector2(4, -2) * scale, 3.8 * scale, color.darkened(0.05))
 
 func _draw_base() -> void:
-	draw_circle(base_position + Vector2(2, 3), 34.0, Color(0, 0, 0, 0.25))
-	draw_circle(base_position, 32.0, Color(0.24, 0.26, 0.38))
-	draw_rect(Rect2(base_position.x - 21, base_position.y - 18, 42, 30), Color(0.34, 0.36, 0.5))
+	_draw_single_base(base_position, Color(0.90, 0.24, 0.18))
+	if double_base_active:
+		_draw_single_base(secondary_base_position, Color(0.28, 0.62, 0.94))
+
+func _draw_single_base(base_pos: Vector2, flag_color: Color) -> void:
+	draw_circle(base_pos + Vector2(2, 3), 38.0, Color(0, 0, 0, 0.28))
+	draw_circle(base_pos, 36.0, Color(0.18, 0.24, 0.34))
+	draw_circle(base_pos, 28.0, Color(0.28, 0.34, 0.46))
+	draw_rect(Rect2(base_pos.x - 24, base_pos.y - 20, 48, 32), Color(0.38, 0.44, 0.56))
 	for idx in range(5):
-		draw_rect(Rect2(base_position.x - 20 + idx * 8.0, base_position.y - 24, 6, 7), Color(0.42, 0.44, 0.56))
-	draw_rect(Rect2(base_position.x - 7, base_position.y - 3, 14, 15), Color(0.42, 0.24, 0.12))
-	draw_line(base_position + Vector2(0, -24), base_position + Vector2(0, -42), Color(0.36, 0.28, 0.14), 2.0)
+		draw_rect(Rect2(base_pos.x - 22 + idx * 9.0, base_pos.y - 28, 7, 8), Color(0.46, 0.52, 0.64))
+	draw_rect(Rect2(base_pos.x - 8, base_pos.y - 3, 16, 15), Color(0.40, 0.24, 0.12))
+	draw_circle(base_pos + Vector2(0, -6), 8.0 + sin(_anim_time * 2.2) * 1.0, Color(0.70, 0.92, 1.0, 0.28))
+	draw_circle(base_pos + Vector2(0, -6), 4.0, Color(0.94, 0.98, 1.0, 0.48))
+	draw_line(base_pos + Vector2(0, -26), base_pos + Vector2(0, -46), Color(0.36, 0.28, 0.14), 2.0)
 	draw_colored_polygon([
-		base_position + Vector2(0, -42),
-		base_position + Vector2(14 + sin(_anim_time * 3.0) * 2.0, -37),
-		base_position + Vector2(0, -33),
-	], Color(0.86, 0.22, 0.16))
+		base_pos + Vector2(0, -46),
+		base_pos + Vector2(15 + sin(_anim_time * 2.6) * 2.0, -40),
+		base_pos + Vector2(0, -34),
+	], flag_color)
 
 func _draw_spawn_markers() -> void:
 	for path in paths:
@@ -260,8 +295,102 @@ func _draw_spawn_markers() -> void:
 		var spawn: Vector2 = path[0]
 		var draw_pos := Vector2(clamp(spawn.x, 16.0, 464.0), clamp(spawn.y, 16.0, 838.0))
 		var pulse := 10.0 + sin(_anim_time * 3.0 + draw_pos.x * 0.02) * 2.0
-		draw_arc(draw_pos, pulse, 0.0, TAU, 18, Color(1.0, 0.38, 0.24, 0.45), 2.0)
-		draw_circle(draw_pos, 4.0, Color(1.0, 0.48, 0.3, 0.65))
+		draw_arc(draw_pos, pulse, 0.0, TAU, 18, Color(1.0, 0.42, 0.28, 0.42), 2.0)
+		draw_circle(draw_pos, 4.0, Color(1.0, 0.54, 0.32, 0.62))
+
+func _draw_foreground_haze() -> void:
+	match map_type:
+		GameData.MapType.SNOW:
+			draw_rect(Rect2(0, 580, 480, 274), Color(0.96, 0.98, 1.0, 0.03))
+		GameData.MapType.ENCHANTED:
+			draw_rect(Rect2(0, 0, 480, 854), Color(0.42, 0.18, 0.58, 0.03))
+		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
+			draw_rect(Rect2(0, 0, 480, 854), Color(1.0, 0.18, 0.04, 0.03))
+
+func _draw_fog_of_war() -> void:
+	if not fog_of_war_active:
+		return
+	var reveal_sources := _collect_fog_reveal_sources()
+	# Smooth circular sampling keeps fog readable without visible square tiles.
+	draw_rect(Rect2(0, 0, SCREEN_SIZE.x, SCREEN_SIZE.y), Color(0.02, 0.03, 0.07, 0.10))
+	var cell_size := 14.0
+	var circle_radius := cell_size * 0.86
+	var y := 0.0
+	while y < SCREEN_SIZE.y:
+		var x := 0.0
+		while x < SCREEN_SIZE.x:
+			var center := Vector2(x + cell_size * 0.5, y + cell_size * 0.5)
+			var reveal: float = _fog_reveal_strength(center, reveal_sources)
+			var alpha := lerpf(0.88, 0.05, smoothstep(0.0, 1.0, reveal))
+			if alpha > 0.02:
+				draw_circle(center, circle_radius, Color(0.02, 0.03, 0.07, alpha))
+			x += cell_size
+		y += cell_size
+
+	for source in reveal_sources:
+		var src_pos: Vector2 = source.get("pos", Vector2.ZERO)
+		var src_radius: float = float(source.get("radius", 0.0))
+		if src_radius > 0.0:
+			draw_circle(src_pos, src_radius * 0.28, Color(0.70, 0.84, 1.0, 0.05))
+			draw_arc(src_pos, src_radius, 0.0, TAU, 44, Color(0.70, 0.84, 1.0, 0.10), 1.2)
+
+func _collect_fog_reveal_sources() -> Array:
+	var reveal_sources: Array = []
+	reveal_sources.append({
+		"pos": base_position,
+		"radius": fog_base_reveal_radius,
+	})
+	if double_base_active:
+		reveal_sources.append({
+			"pos": secondary_base_position,
+			"radius": fog_base_reveal_radius,
+		})
+	var owner := get_parent()
+	if owner == null:
+		return reveal_sources
+	var tower_container: Node = owner.get_node_or_null("TowerContainer")
+	if tower_container != null:
+		for tower_node in tower_container.get_children():
+			var base_range: float = float(tower_node.get("attack_range"))
+			if base_range <= 0.0:
+				continue
+			var reveal_radius: float = maxf(base_range * fog_tower_reveal_mult, 98.0)
+			reveal_sources.append({
+				"pos": tower_node.position,
+				"radius": reveal_radius,
+			})
+	var player_container: Node = owner.get_node_or_null("PlayerContainer")
+	if player_container != null and player_container.get_child_count() > 0:
+		var player_node := player_container.get_child(0) as Node2D
+		if player_node != null:
+			reveal_sources.append({
+				"pos": player_node.position,
+				"radius": 112.0,
+			})
+	var placement_active: bool = bool(owner.get("placement_active"))
+	if placement_active:
+		var preview_pos: Vector2 = owner.get("placement_preview_pos")
+		if preview_pos.x >= 0.0:
+			var preview_range: float = float(owner.get("placement_preview_range"))
+			reveal_sources.append({
+				"pos": preview_pos,
+				"radius": maxf(preview_range * 0.85, 96.0),
+			})
+	return reveal_sources
+
+func _fog_reveal_strength(point: Vector2, reveal_sources: Array) -> float:
+	var reveal: float = 0.0
+	for source in reveal_sources:
+		var src_pos: Vector2 = source.get("pos", Vector2.ZERO)
+		var src_radius: float = float(source.get("radius", 0.0))
+		if src_radius <= 0.0:
+			continue
+		var dist: float = point.distance_to(src_pos)
+		if dist > src_radius:
+			continue
+		var local_reveal := 1.0 - dist / src_radius
+		reveal = maxf(reveal, local_reveal)
+	return clampf(reveal, 0.0, 1.0)
 
 func _closest_point_on_segment(point: Vector2, a: Vector2, b: Vector2) -> Vector2:
 	var segment := b - a

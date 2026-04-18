@@ -24,6 +24,7 @@ const SFX_PATHS := {
 var music_player: AudioStreamPlayer
 var sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_index: int = 0
+var master_volume_db: float = 0.0
 var music_volume_db: float = -12.0
 var sfx_volume_db: float = -8.0
 var _current_music: String = ""
@@ -39,15 +40,22 @@ func _ready() -> void:
 		add_child(player)
 		sfx_players.append(player)
 
+	master_volume_db = SaveManager.get_float("master_volume_db", 0.0)
 	music_volume_db = SaveManager.get_float("music_volume_db", -12.0)
 	sfx_volume_db = SaveManager.get_float("sfx_volume_db", -8.0)
 	_apply_volumes()
 
 func _apply_volumes() -> void:
 	if music_player:
-		music_player.volume_db = music_volume_db
+		music_player.volume_db = music_volume_db + master_volume_db
 	for player in sfx_players:
-		player.volume_db = sfx_volume_db
+		player.volume_db = sfx_volume_db + master_volume_db
+
+func set_master_volume(volume_db: float) -> void:
+	master_volume_db = volume_db
+	_apply_volumes()
+	SaveManager.set_val("master_volume_db", volume_db)
+	SaveManager.flush()
 
 func set_music_volume(volume_db: float) -> void:
 	music_volume_db = volume_db
@@ -129,7 +137,7 @@ func _play_music(key: String) -> void:
 	if stream == null:
 		return
 	music_player.stream = stream
-	music_player.volume_db = music_volume_db
+	music_player.volume_db = music_volume_db + master_volume_db
 	music_player.play()
 	_current_music = key
 
@@ -144,5 +152,5 @@ func _play_sfx(key: String) -> void:
 	_sfx_index = (_sfx_index + 1) % sfx_players.size()
 	player.stop()
 	player.stream = stream
-	player.volume_db = sfx_volume_db
+	player.volume_db = sfx_volume_db + master_volume_db
 	player.play()

@@ -11,12 +11,14 @@ signal wave_banner_shown(wave: int, modifier: int)
 signal floating_text_requested(x: float, y: float, text: String, color: Color, duration: float, size: float)
 signal tower_selected(tower_node)
 signal placement_mode_changed(active: bool, tower_type: int)
+signal power_targeting_mode_changed(active: bool, power_type: int)
 signal campaign_won_triggered(stars: int, score: int, level_id: int)
-signal warning_requested(title: String, body: String, color: Color)
+signal warning_requested(title: String, body: String, color: Color, priority: int, duration: float)
 signal game_configured
 
 # ─── Scene references (set in game.tscn) ─────────────────────────────────────
 @onready var enemy_container: Node2D = $EnemyContainer
+@onready var player_container: Node2D = $PlayerContainer
 @onready var tower_container: Node2D = $TowerContainer
 @onready var projectile_container: Node2D = $ProjectileContainer
 @onready var effects_container: Node2D = $EffectsContainer
@@ -27,6 +29,7 @@ signal game_configured
 
 # Preloaded scenes
 var enemy_scene: PackedScene = preload("res://scenes/enemy.tscn")
+var player_scene: PackedScene = preload("res://scenes/player.tscn")
 var tower_scene: PackedScene = preload("res://scenes/tower.tscn")
 var projectile_scene: PackedScene = preload("res://scenes/projectile.tscn")
 var floating_text_scene: PackedScene = preload("res://scenes/floating_text.tscn")
@@ -52,9 +55,13 @@ var wave_delay: float = 5.0
 var auto_wave: bool = false
 var show_wave_banner: bool = false
 var wave_banner_timer: float = 0.0
+var elite_spawn_pending: bool = false
+var non_boss_wave_counter: int = 0
+var is_night_cycle: bool = false
+var day_night_changed_this_wave: bool = false
 
 # Difficulty / mode
-var difficulty: int = 1         # 0=easy, 1=normal, 2=hard, 3=endless
+var difficulty: int = 1         # 0=easy, 1=normal, 2=hard
 var enemy_hp_mult: float = 1.0
 var enemy_speed_mult: float = 1.0
 var enemy_dmg_mult: float = 1.0
@@ -62,6 +69,27 @@ var gold_mult: float = 1.0
 var spawn_rate_mult: float = 1.0
 var is_endless: bool = false
 var is_boss_rush: bool = false
+var is_boss_gauntlet: bool = false
+var is_daily_challenge: bool = false
+var daily_challenge_seed: int = 0
+var daily_challenge_modifiers: Array[int] = []
+var is_randomizer_mode: bool = false
+var randomizer_seed: int = 0
+var randomizer_tower_costs: Dictionary = {}
+var randomizer_power_cooldowns: Dictionary = {}
+var randomizer_power_damage_mult: float = 1.0
+var randomizer_start_gold: int = 50
+var fog_of_war_active: bool = false
+var fog_base_reveal_radius: float = 170.0
+var fog_tower_reveal_mult: float = 0.9
+var double_base_active: bool = false
+var secondary_base_position: Vector2 = Vector2(336, 726)
+var dual_base_pattern: String = "alternate"
+var branching_active: bool = false
+var mini_boss_interval: int = 0
+var mini_bosses_pending: int = 0
+var mini_boss_archetypes: Array[String] = []
+var mini_boss_wave_queue: Array[String] = []
 var campaign_level: Dictionary = {}   # Non-empty when in campaign mode
 
 # Boss state
@@ -76,6 +104,16 @@ var interest_rate: float = 0.05
 var base_hp_before_wave: float = 100.0
 var diamonds_this_run: int = 0
 var repairs_this_run: int = 0
+var player_damage_level: int = 1
+var player_speed_level: int = 1
+var player_hp_level: int = 1
+var base_hp_level: int = 1
+var player_upgrades_bought: Dictionary = {
+	"damage": false,
+	"speed": false,
+	"hp": false,
+	"base": false,
+}
 
 # Combat tracking
 var total_kills: int = 0
@@ -96,6 +134,9 @@ var target_mode: int = GameData.TargetMode.FIRST
 # Placement mode
 var placement_active: bool = false
 var placement_tower_type: int = GameData.TowerType.ARROW
+var power_targeting_active: bool = false
+var power_targeting_type: int = -1
+var power_target_preview_pos: Vector2 = Vector2(-999, -999)
 
 # Camera shake
 var shake_timer: float = 0.0
@@ -141,6 +182,7 @@ var traps_placed_run: int = 0
 
 # Play time
 var play_time: float = 0.0
+var player_node: Node2D = null
 
 # ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -173,6 +215,10 @@ func reset() -> void:
 	auto_wave = false
 	show_wave_banner = false
 	wave_banner_timer = 0.0
+	elite_spawn_pending = false
+	non_boss_wave_counter = 0
+	is_night_cycle = false
+	day_night_changed_this_wave = false
 	difficulty = 1
 	enemy_hp_mult = 1.0
 	enemy_speed_mult = 1.0
@@ -181,6 +227,25 @@ func reset() -> void:
 	spawn_rate_mult = 1.0
 	is_endless = false
 	is_boss_rush = false
+	is_boss_gauntlet = false
+	is_daily_challenge = false
+	daily_challenge_seed = 0
+	daily_challenge_modifiers = []
+	is_randomizer_mode = false
+	randomizer_seed = 0
+	randomizer_tower_costs = {}
+	randomizer_power_cooldowns = {}
+	randomizer_power_damage_mult = 1.0
+	randomizer_start_gold = 50
+	fog_of_war_active = false
+	double_base_active = false
+	secondary_base_position = Vector2(screen_w * 0.7, screen_h * 0.85)
+	dual_base_pattern = "alternate"
+	branching_active = false
+	mini_boss_interval = 0
+	mini_bosses_pending = 0
+	mini_boss_archetypes.clear()
+	mini_boss_wave_queue.clear()
 	campaign_level = {}
 	boss_pool = []
 	current_boss_type = -1
@@ -191,6 +256,16 @@ func reset() -> void:
 	base_hp_before_wave = 100.0
 	diamonds_this_run = 0
 	repairs_this_run = 0
+	player_damage_level = 1
+	player_speed_level = 1
+	player_hp_level = 1
+	base_hp_level = 1
+	player_upgrades_bought = {
+		"damage": false,
+		"speed": false,
+		"hp": false,
+		"base": false,
+	}
 	total_kills = 0
 	combo_count = 0
 	best_combo = 0
@@ -203,6 +278,9 @@ func reset() -> void:
 	target_mode = GameData.TargetMode.FIRST
 	placement_active = false
 	placement_tower_type = GameData.TowerType.ARROW
+	power_targeting_active = false
+	power_targeting_type = -1
+	power_target_preview_pos = Vector2(-999, -999)
 	shake_timer = 0.0
 	shake_intensity = 0.0
 	shake_offset = Vector2.ZERO
@@ -222,6 +300,9 @@ func reset() -> void:
 	if enemy_container:
 		for c in enemy_container.get_children():
 			c.queue_free()
+	if player_container:
+		for c in player_container.get_children():
+			c.queue_free()
 	if tower_container:
 		for c in tower_container.get_children():
 			c.queue_free()
@@ -236,32 +317,190 @@ func reset() -> void:
 	generate_paths()
 	_generate_terrain_zones()
 	_sync_map_visuals()
+	_spawn_player()
 	gold_changed.emit(gold)
 	score_changed.emit(score)
 	base_hp_changed.emit(base_hp, max_base_hp)
 	wave_changed.emit(wave)
 
 func configure(p_difficulty: int, p_map_type: int) -> void:
+	if p_difficulty == 3:
+		configure_endless(1, p_map_type)
+		return
+	clear_saved_run()
 	campaign_level = {}
+	is_endless = false
+	is_boss_rush = false
+	is_boss_gauntlet = false
+	is_daily_challenge = false
+	daily_challenge_seed = 0
+	daily_challenge_modifiers = []
+	is_randomizer_mode = false
+	randomizer_seed = 0
+	randomizer_tower_costs = {}
+	randomizer_power_cooldowns = {}
+	randomizer_power_damage_mult = 1.0
+	randomizer_start_gold = 50
+	fog_of_war_active = false
+	double_base_active = false
+	dual_base_pattern = "alternate"
+	branching_active = false
+	mini_boss_interval = 0
+	mini_bosses_pending = 0
+	mini_boss_archetypes.clear()
+	mini_boss_wave_queue.clear()
 	map_type = p_map_type
+	secondary_base_position = _get_secondary_base_position()
 	_apply_difficulty(p_difficulty)
 	AchievementManager.reset_run()
 	_load_skill_bonuses()
+	_init_powers()
 	generate_paths()
 	_generate_terrain_zones()
 	_sync_map_visuals()
-	game_configured.emit()
-	gold_changed.emit(gold)
-	score_changed.emit(score)
-	base_hp_changed.emit(base_hp, max_base_hp)
-	wave_changed.emit(wave)
+	_spawn_player()
+	_broadcast_state()
+
+func configure_endless(p_difficulty: int, p_map_type: int) -> void:
+	clear_saved_run()
+	campaign_level = {}
+	map_type = p_map_type
+	is_endless = true
+	is_boss_rush = false
+	is_boss_gauntlet = false
+	is_daily_challenge = false
+	daily_challenge_seed = 0
+	daily_challenge_modifiers = []
+	is_randomizer_mode = false
+	randomizer_seed = 0
+	randomizer_tower_costs = {}
+	randomizer_power_cooldowns = {}
+	randomizer_power_damage_mult = 1.0
+	randomizer_start_gold = 50
+	fog_of_war_active = false
+	double_base_active = false
+	dual_base_pattern = "alternate"
+	branching_active = false
+	mini_boss_interval = 0
+	mini_bosses_pending = 0
+	mini_boss_archetypes.clear()
+	mini_boss_wave_queue.clear()
+	secondary_base_position = _get_secondary_base_position()
+	_apply_standard_difficulty(p_difficulty)
+	AchievementManager.reset_run()
+	_load_skill_bonuses()
+	_init_powers()
+	generate_paths()
+	_generate_terrain_zones()
+	_sync_map_visuals()
+	_spawn_player()
+	_broadcast_state()
+
+func configure_daily_challenge(p_map_type: int) -> void:
+	configure(1, p_map_type)
+	is_daily_challenge = true
+	var date := Time.get_date_dict_from_system()
+	daily_challenge_seed = int(date.get("year", 0)) * 10000 + int(date.get("month", 0)) * 100 + int(date.get("day", 0))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = daily_challenge_seed
+	var all_mods: Array = []
+	for mod in GameData.WaveModifier.values():
+		if mod != GameData.WaveModifier.NONE:
+			all_mods.append(mod)
+	daily_challenge_modifiers.clear()
+	for _i in range(3):
+		if all_mods.is_empty():
+			break
+		daily_challenge_modifiers.append(all_mods[rng.randi_range(0, all_mods.size() - 1)])
+	_emit_warning(
+		"Daily Challenge",
+		"Today's modifier rotation is active. Adapt your tower mix each wave.",
+		Color(0.82, 0.90, 1.0),
+		2,
+		3.4
+	)
+	_broadcast_state()
+
+func configure_randomizer(p_map_type: int = -1) -> void:
+	var map_values: Array = GameData.MapType.values()
+	var resolved_map := p_map_type
+	if resolved_map < 0 or resolved_map >= map_values.size():
+		resolved_map = map_values[randi() % map_values.size()]
+	configure(1, resolved_map)
+	is_randomizer_mode = true
+	randomizer_seed = int(Time.get_unix_time_from_system())
+	var rng := RandomNumberGenerator.new()
+	rng.seed = randomizer_seed
+
+	randomizer_start_gold = rng.randi_range(20, 150)
+	randomizer_tower_costs.clear()
+	for ttype in GameData.TowerType.values():
+		var base_cost := int(GameData.get_tower(ttype).get("cost", 50))
+		randomizer_tower_costs[ttype] = maxi(5, int(round(base_cost * rng.randf_range(0.5, 2.0))))
+
+	randomizer_power_cooldowns.clear()
+	for ptype in GameData.PowerType.values():
+		var base_cd := float(GameData.get_power(ptype).get("cooldown", 8.0))
+		randomizer_power_cooldowns[ptype] = base_cd * rng.randf_range(0.4, 1.8)
+
+	randomizer_power_damage_mult = rng.randf_range(0.5, 2.5)
+	enemy_hp_mult = rng.randf_range(0.5, 2.0)
+	enemy_dmg_mult = rng.randf_range(0.5, 2.0)
+	enemy_speed_mult = rng.randf_range(0.7, 1.5)
+	gold_mult = rng.randf_range(0.5, 2.0)
+	spawn_rate_mult = rng.randf_range(0.6, 1.6)
+	gold = randomizer_start_gold + SaveManager.get_skill_level("start_gold") * 25
+
+	if is_instance_valid(player_node):
+		player_node.attack_damage *= rng.randf_range(0.7, 1.5)
+		player_node.move_speed *= rng.randf_range(0.7, 1.5)
+		player_node.attack_range *= rng.randf_range(0.7, 1.5)
+
+	_emit_warning(
+		"Randomizer Active",
+		"Economy, cooldowns, and enemy scaling are scrambled for this run.",
+		Color(0.96, 0.74, 0.34),
+		2,
+		3.6
+	)
+	_broadcast_state()
+
+func configure_continue_saved() -> bool:
+	return load_game()
 
 func configure_campaign(ld: Dictionary) -> void:
+	clear_saved_run()
 	campaign_level = ld
 	map_type        = ld.get("map", GameData.MapType.CLASSIC)
 	difficulty      = 1
 	is_endless      = false
 	is_boss_rush    = false
+	is_boss_gauntlet = false
+	is_daily_challenge = false
+	daily_challenge_seed = 0
+	daily_challenge_modifiers = []
+	is_randomizer_mode = false
+	randomizer_seed = 0
+	randomizer_tower_costs = {}
+	randomizer_power_cooldowns = {}
+	randomizer_power_damage_mult = 1.0
+	randomizer_start_gold = 50
+	fog_of_war_active = bool(ld.get("fog", false))
+	double_base_active = bool(ld.get("double_base", false))
+	dual_base_pattern = str(ld.get("dual_base_pattern", _get_dual_base_default_pattern()))
+	branching_active = bool(ld.get("branching", false))
+	mini_boss_interval = int(ld.get("mini_boss_interval", 0))
+	mini_bosses_pending = 0
+	mini_boss_archetypes = []
+	for token in ld.get("mini_boss_archetypes", []):
+		mini_boss_archetypes.append(str(token))
+	mini_boss_wave_queue.clear()
+	if mini_boss_interval > 0 and mini_boss_archetypes.is_empty():
+		mini_boss_archetypes = ["juggernaut", "raider", "warlock"]
+	secondary_base_position = _get_secondary_base_position()
+	var secondary_v: Variant = ld.get("secondary_base", secondary_base_position)
+	if secondary_v is Vector2:
+		secondary_base_position = secondary_v
 	boss_interval   = ld.get("boss_interval", 5)
 	enemy_hp_mult    = ld.get("hp",    1.0)
 	enemy_dmg_mult   = ld.get("dmg",   1.0)
@@ -273,9 +512,14 @@ func configure_campaign(ld: Dictionary) -> void:
 	base_hp     = 100.0
 	AchievementManager.reset_run()
 	_load_skill_bonuses()
+	_init_powers()
 	generate_paths()
 	_generate_terrain_zones()
 	_sync_map_visuals()
+	_spawn_player()
+	_broadcast_state()
+
+func _broadcast_state() -> void:
 	game_configured.emit()
 	gold_changed.emit(gold)
 	score_changed.emit(score)
@@ -284,50 +528,90 @@ func configure_campaign(ld: Dictionary) -> void:
 
 func _trigger_campaign_win() -> void:
 	game_over = true
+	clear_saved_run()
 	var lid: int   = campaign_level.get("id",    0)
 	var star2: int = campaign_level.get("star2", 99999)
 	var star3: int = campaign_level.get("star3", 99999)
 	var stars: int = 1
 	if   score >= star3: stars = 3
 	elif score >= star2: stars = 2
-	var diamonds: int = campaign_level.get("diamonds", 3)
+	var diamonds_reward: int = campaign_level.get("diamonds", 3)
+	var total_run_diamonds := diamonds_reward + diamonds_this_run
+	if diamonds_reward > 0:
+		AchievementManager.on_diamonds_earned(diamonds_reward)
 	SaveManager.save_campaign_result(lid, stars)
-	SaveManager.add_diamonds(diamonds)
+	if total_run_diamonds > 0:
+		SaveManager.add_diamonds(total_run_diamonds)
+		SaveManager.add_stat("lifetime_diamonds", total_run_diamonds)
 	SaveManager.add_stat("lifetime_games", 1)
 	SaveManager.add_stat("lifetime_waves", wave)
 	SaveManager.add_stat("lifetime_score", score)
+	SaveManager.add_stat("lifetime_kills", total_kills)
+	SaveManager.add_stat("lifetime_gold", total_gold_earned)
+	SaveManager.add_stat("lifetime_bosses", bosses_killed_this_run)
+	SaveManager.set_stat_max("lifetime_best_combo", best_combo)
 	SaveManager.flush()
 	var beaten_count := CampaignData.get_beaten_count()
 	var stars5_count := CampaignData.get_three_star_count()
+	var total_levels := maxi(1, CampaignData.get_total_levels())
 	AchievementManager.on_campaign_result(lid, stars, base_hp >= max_base_hp,
-		beaten_count, stars5_count, 40)
+		beaten_count, stars5_count, total_levels)
 	if has_node("/root/SoundManager"):
 		get_node("/root/SoundManager").play_victory_stinger()
 		get_node("/root/SoundManager").play_victory_music()
 	campaign_won_triggered.emit(stars, score, lid)
 
-func _apply_difficulty(level: int) -> void:
-	difficulty = level
-	is_endless = (level == 3)
-	is_boss_rush = (level == 4)
-	match level:
-		0: # Easy
-			enemy_hp_mult = 0.7; enemy_dmg_mult = 0.6; enemy_speed_mult = 0.85
-			gold_mult = 1.3; spawn_rate_mult = 0.8; gold = 80
-		1: # Normal
-			enemy_hp_mult = 1.0; enemy_dmg_mult = 1.0; enemy_speed_mult = 1.0
-			gold_mult = 1.0; spawn_rate_mult = 1.0; gold = 50
-		2: # Hard
-			enemy_hp_mult = 1.5; enemy_dmg_mult = 1.4; enemy_speed_mult = 1.15
-			gold_mult = 0.8; spawn_rate_mult = 1.3; gold = 30
-		3: # Endless
-			enemy_hp_mult = 1.0; enemy_dmg_mult = 1.0; enemy_speed_mult = 1.0
-			gold_mult = 1.0; spawn_rate_mult = 1.0; gold = 50
-		4: # Boss Rush
-			enemy_hp_mult = 1.0; enemy_dmg_mult = 1.0; enemy_speed_mult = 1.0
-			gold_mult = 1.5; spawn_rate_mult = 0.8; gold = 100; boss_interval = 1
+func _apply_standard_difficulty(level: int) -> void:
+	difficulty = clamp(level, 0, 2)
+	match difficulty:
+		0:
+			enemy_hp_mult = 0.72
+			enemy_dmg_mult = 0.65
+			enemy_speed_mult = 0.9
+			gold_mult = 1.25
+			spawn_rate_mult = 0.9
+			gold = 85
+		2:
+			enemy_hp_mult = 1.45
+			enemy_dmg_mult = 1.35
+			enemy_speed_mult = 1.12
+			gold_mult = 0.82
+			spawn_rate_mult = 1.18
+			gold = 35
 		_:
-			enemy_hp_mult = 1.0; gold = 50
+			enemy_hp_mult = 1.0
+			enemy_dmg_mult = 1.0
+			enemy_speed_mult = 1.0
+			gold_mult = 1.0
+			spawn_rate_mult = 1.0
+			gold = 55
+	boss_interval = 5
+
+func apply_endless_sub_difficulty(sub_diff: int) -> void:
+	is_endless = true
+	_apply_standard_difficulty(sub_diff)
+
+func _apply_difficulty(level: int) -> void:
+	is_endless = false
+	is_boss_rush = false
+	is_boss_gauntlet = false
+	match level:
+		4:
+			is_boss_rush = true
+			_apply_standard_difficulty(1)
+			gold_mult = 1.45
+			spawn_rate_mult = 0.75
+			gold = 100
+			boss_interval = 1
+		5:
+			is_boss_gauntlet = true
+			_apply_standard_difficulty(1)
+			gold_mult = 1.2
+			spawn_rate_mult = 0.6
+			gold = 90
+			boss_interval = 1
+		_:
+			_apply_standard_difficulty(level)
 
 func _load_skill_bonuses() -> void:
 	var td := SaveManager.get_skill_level("tower_damage")
@@ -347,9 +631,44 @@ func _load_skill_bonuses() -> void:
 	max_base_hp += bh * 20.0
 	base_hp = max_base_hp
 
+func get_tower_cost(tower_type: int) -> int:
+	if is_randomizer_mode:
+		return int(randomizer_tower_costs.get(tower_type, GameData.get_tower(tower_type).get("cost", 0)))
+	return int(GameData.get_tower(tower_type).get("cost", 0))
+
+func get_power_cooldown(power_type: int) -> float:
+	if is_randomizer_mode:
+		return float(randomizer_power_cooldowns.get(power_type, GameData.get_power(power_type).get("cooldown", 0.0)))
+	return float(GameData.get_power(power_type).get("cooldown", 0.0))
+
+func get_player_upgrade_costs() -> Dictionary:
+	return {
+		"damage": player_damage_level * 25,
+		"speed": player_speed_level * 20,
+		"hp": player_hp_level * 30,
+		"base": base_hp_level * 40,
+		"repair": 20,
+	}
+
 func _init_powers() -> void:
 	for pt in GameData.PowerType.values():
 		power_cooldowns[pt] = 0.0
+
+func _spawn_player() -> void:
+	if not is_instance_valid(player_container) or player_scene == null:
+		player_node = null
+		return
+	for child in player_container.get_children():
+		child.queue_free()
+	var p := player_scene.instantiate() as Node2D
+	if p == null:
+		player_node = null
+		return
+	player_container.add_child(p)
+	p.position = base_position + Vector2(0, -96)
+	if p.has_method("setup_from_skills"):
+		p.setup_from_skills()
+	player_node = p
 
 # ─── Main Update Loop ─────────────────────────────────────────────────────────
 
@@ -384,8 +703,8 @@ func _process(delta: float) -> void:
 		if wave_banner_timer <= 0:
 			show_wave_banner = false
 
-	# Placement preview animation
-	if placement_active:
+	# Placement/power target preview animation
+	if placement_active or power_targeting_active:
 		placement_preview_anim += delta
 		queue_redraw()
 
@@ -477,9 +796,52 @@ func generate_paths() -> void:
 		GameData.MapType.LAVA:         _gen_lava_paths(w, h, bx, by)
 		GameData.MapType.ENCHANTED:    _gen_enchanted_paths(w, h, bx, by)
 		GameData.MapType.VOLCANO:      _gen_volcano_paths(w, h, bx, by)
+	_retarget_paths_for_active_bases()
 
 func _jitter(base: float, range_val: float) -> float:
 	return base + randf_range(-range_val, range_val)
+
+func _get_secondary_base_position() -> Vector2:
+	match map_type:
+		GameData.MapType.CLASSIC:
+			return Vector2(screen_w * 0.73, screen_h * 0.84)
+		GameData.MapType.VALLEY:
+			return Vector2(screen_w * 0.30, screen_h * 0.84)
+		GameData.MapType.CROSSROADS:
+			return Vector2(screen_w * 0.72, screen_h * 0.84)
+		GameData.MapType.DESERT:
+			return Vector2(screen_w * 0.70, screen_h * 0.84)
+		GameData.MapType.SNOW:
+			return Vector2(screen_w * 0.31, screen_h * 0.84)
+		GameData.MapType.LAVA:
+			return Vector2(screen_w * 0.72, screen_h * 0.84)
+		GameData.MapType.ENCHANTED:
+			return Vector2(screen_w * 0.31, screen_h * 0.84)
+		GameData.MapType.VOLCANO:
+			return Vector2(screen_w * 0.70, screen_h * 0.84)
+		_:
+			return Vector2(screen_w * 0.70, screen_h * 0.84)
+
+func _get_dual_base_default_pattern() -> String:
+	match map_type:
+		GameData.MapType.CROSSROADS:
+			return "crossroads_split"
+		GameData.MapType.ENCHANTED, GameData.MapType.VALLEY:
+			return "adaptive"
+		_:
+			return "alternate"
+
+func _get_active_base_positions() -> Array:
+	var bases: Array = [base_position]
+	if double_base_active:
+		bases.append(secondary_base_position)
+	return bases
+
+func _is_too_close_to_any_base(pos: Vector2, min_distance: float) -> bool:
+	for base_pos in _get_active_base_positions():
+		if pos.distance_to(base_pos) < min_distance:
+			return true
+	return false
 
 func _gen_classic_paths(w: float, h: float, bx: float, by: float) -> void:
 	var j := 0.04
@@ -630,17 +992,65 @@ func _gen_volcano_paths(w: float, h: float, bx: float, by: float) -> void:
 		Vector2(bx, by),
 	])
 
+func _retarget_paths_for_active_bases() -> void:
+	if not double_base_active:
+		return
+	for idx in range(paths.size()):
+		var path: Array = paths[idx]
+		if path.is_empty():
+			continue
+		path[path.size() - 1] = _get_path_target_base(path, idx)
+
+func _get_path_target_base(path: Array, path_idx: int) -> Vector2:
+	var pattern := dual_base_pattern
+	if pattern == "":
+		pattern = _get_dual_base_default_pattern()
+	var default_secondary := (path_idx % 2) == 1
+	var steer_secondary := default_secondary
+	var approach_point: Vector2 = path[path.size() - 2] if path.size() >= 2 else path[0]
+	match pattern:
+		"crossroads_split":
+			# Keep left-side routes on primary and right-side routes on secondary.
+			steer_secondary = approach_point.x > screen_w * 0.52
+		"adaptive":
+			# Use nearest-base routing and break close ties by parity.
+			var d_primary := approach_point.distance_to(base_position)
+			var d_secondary := approach_point.distance_to(secondary_base_position)
+			if absf(d_primary - d_secondary) < 14.0:
+				steer_secondary = default_secondary
+			else:
+				steer_secondary = d_secondary < d_primary
+		_:
+			steer_secondary = default_secondary
+	return secondary_base_position if steer_secondary else base_position
+
 func _sync_map_visuals() -> void:
 	if map_node == null:
 		return
 	map_node.paths = paths
 	map_node.map_type = map_type
 	map_node.base_position = base_position
+	map_node.set("double_base_active", double_base_active)
+	map_node.set("secondary_base_position", secondary_base_position)
 	map_node.set("terrain_zones", terrain_zones)
+	map_node.set("fog_of_war_active", fog_of_war_active)
+	map_node.set("fog_base_reveal_radius", fog_base_reveal_radius)
+	map_node.set("fog_tower_reveal_mult", fog_tower_reveal_mult)
+	map_node.set("night_mode_active", is_night_cycle)
 	if map_node.has_method("refresh_layout"):
 		map_node.refresh_layout()
 	else:
 		map_node.queue_redraw()
+
+func _is_night_wave(wave_number: int) -> bool:
+	if wave_number < 8:
+		return false
+	return ((wave_number / 8) % 2) == 1
+
+func _update_day_night_cycle() -> void:
+	var was_night := is_night_cycle
+	is_night_cycle = _is_night_wave(wave)
+	day_night_changed_this_wave = was_night != is_night_cycle
 
 func _generate_terrain_zones() -> void:
 	terrain_zones.clear()
@@ -664,7 +1074,7 @@ func _generate_terrain_zones() -> void:
 
 func get_next_wave_preview() -> Dictionary:
 	var next_wave: int = wave + 1
-	var boss_wave := is_boss_rush or (boss_interval > 0 and next_wave % boss_interval == 0)
+	var boss_wave := is_boss_gauntlet or is_boss_rush or (boss_interval > 0 and next_wave % boss_interval == 0)
 	var title := "Next Wave %d" % next_wave
 	var body_lines: Array[String] = []
 	if boss_wave:
@@ -672,13 +1082,36 @@ func get_next_wave_preview() -> Dictionary:
 		var preview_boss: int = boss_types[next_wave % boss_types.size()]
 		var boss_name: String = GameData.get_boss(preview_boss).get("name", "Boss")
 		body_lines.append("Boss incoming: %s" % boss_name)
-		body_lines.append("Expect heavy damage and ability casts.")
+		if is_boss_gauntlet:
+			body_lines.append("Boss Gauntlet: every wave is a boss duel.")
+		else:
+			body_lines.append("Expect heavy damage and ability casts.")
 	else:
 		var count: int = int((3 + next_wave * 2) * spawn_rate_mult)
 		body_lines.append("Approx enemies: %d" % min(count, 100))
 		body_lines.append("Likely foes: %s" % _preview_enemy_names(next_wave))
-	if next_wave >= 3:
+	if is_daily_challenge and not daily_challenge_modifiers.is_empty():
+		var daily_mod: int = daily_challenge_modifiers[next_wave % daily_challenge_modifiers.size()]
+		var daily_info: Dictionary = GameData.MODIFIER_NAMES.get(daily_mod, {})
+		body_lines.append("Daily modifier: %s" % str(daily_info.get("name", "Special")))
+	elif next_wave >= 3:
 		body_lines.append("Possible modifier: armored, fast, swarm, or rich.")
+	var next_night := _is_night_wave(next_wave)
+	if next_night != is_night_cycle:
+		if next_night:
+			body_lines.append("Time shift: Nightfall (+20% enemy HP, -10% tower range).")
+		else:
+			body_lines.append("Time shift: Daylight (normal visibility and tower range).")
+	if (not boss_wave) and (non_boss_wave_counter >= 4):
+		body_lines.append("Elite scout expected: crown target with bonus reward.")
+	if mini_boss_interval > 0 and next_wave % mini_boss_interval == 0:
+		body_lines.append("Mini-boss surge: %s" % _mini_boss_preview_text())
+	if double_base_active:
+		body_lines.append("Dual-base layout: lane pressure is split across both cores.")
+	if branching_active:
+		body_lines.append("Tower branching unlocks at level 5.")
+	if is_randomizer_mode:
+		body_lines.append("Randomizer: costs, cooldowns, and scaling are scrambled.")
 	var terrain_text := _get_map_hazard_text()
 	if terrain_text != "":
 		body_lines.append("Terrain: %s" % terrain_text)
@@ -712,30 +1145,124 @@ func _get_map_hazard_text() -> String:
 		_:
 			return ""
 
+func _mini_boss_preview_text() -> String:
+	if not mini_boss_wave_queue.is_empty():
+		var live_names: Array[String] = []
+		for archetype in mini_boss_wave_queue:
+			var live_readable := _mini_boss_archetype_name(archetype)
+			if live_readable not in live_names:
+				live_names.append(live_readable)
+		return ", ".join(live_names)
+	if not mini_boss_archetypes.is_empty():
+		var names: Array[String] = []
+		for archetype in mini_boss_archetypes:
+			var readable := _mini_boss_archetype_name(archetype)
+			if readable not in names:
+				names.append(readable)
+		return ", ".join(names)
+	return "Juggernaut, Raider, Warlock"
+
+func _mini_boss_archetype_name(archetype: String) -> String:
+	match archetype:
+		"juggernaut":
+			return "Juggernaut"
+		"raider":
+			return "Raider"
+		"warlock":
+			return "Warlock"
+		_:
+			return "Elite"
+
+func _emit_warning(title: String, body: String, color: Color, priority: int = 1, duration: float = 3.0) -> void:
+	warning_requested.emit(title, body, color, priority, duration)
+
 func _emit_wave_warning() -> void:
+	if day_night_changed_this_wave:
+		if is_night_cycle:
+			_emit_warning(
+				"Nightfall",
+				"Moon phase active: enemies gain 20% HP and towers lose 10% range.",
+				Color(0.56, 0.68, 0.96),
+				2,
+				3.8
+			)
+		else:
+			_emit_warning(
+				"Daybreak",
+				"Sunlight restored. Enemy HP and tower range are back to normal.",
+				Color(0.96, 0.86, 0.46),
+				1,
+				3.0
+			)
+		return
 	if current_boss_type >= 0:
 		var boss_name: String = str(GameData.get_boss(current_boss_type).get("name", "Boss"))
-		warning_requested.emit(
+		_emit_warning(
 			"Boss Wave",
 			"%s is entering the field. Save your powers and cover the lane merge." % boss_name,
-			Color(0.95, 0.36, 0.24)
+			Color(0.95, 0.36, 0.24),
+			3,
+			4.2
 		)
-		if has_node("/root/SoundManager"):
-			get_node("/root/SoundManager").play_warning(true)
 		return
 	if current_wave_modifier != GameData.WaveModifier.NONE:
 		var mod_data: Dictionary = GameData.MODIFIER_NAMES.get(current_wave_modifier, {})
-		warning_requested.emit(
+		_emit_warning(
 			"%s Wave" % mod_data.get("name", "Danger"),
 			"Wave %d has an active modifier. Adjust your tower mix before the pressure spikes." % wave,
-			mod_data.get("color", Color(0.9, 0.6, 0.25))
+			mod_data.get("color", Color(0.9, 0.6, 0.25)),
+			2,
+			3.3
 		)
-		if has_node("/root/SoundManager"):
-			get_node("/root/SoundManager").play_warning(false)
+		return
+	if elite_spawn_pending:
+		_emit_warning(
+			"Elite Enemy",
+			"A crowned elite unit is in this wave: +HP, +damage, +gold reward.",
+			Color(1.0, 0.80, 0.30),
+			2,
+			3.1
+		)
 		return
 	var terrain_text := _get_map_hazard_text()
 	if terrain_text != "" and wave == 1:
-		warning_requested.emit("Terrain Alert", terrain_text, Color(0.64, 0.82, 1.0))
+		_emit_warning("Terrain Alert", terrain_text, Color(0.64, 0.82, 1.0), 1, 2.8)
+		return
+	if double_base_active and wave == 1:
+		_emit_warning(
+			"Dual Base Defense",
+			"This stage has two base cores. Anchor one lane per core before stacking damage.",
+			Color(0.74, 0.88, 1.0),
+			2,
+			3.4
+		)
+		return
+	if fog_of_war_active and wave == 1:
+		_emit_warning(
+			"Fog of War",
+			"Only revealed enemies can be targeted. Build coverage before leaks reach the base.",
+			Color(0.58, 0.74, 0.96),
+			2,
+			3.3
+		)
+		return
+	if branching_active and wave == 1:
+		_emit_warning(
+			"Tower Branching",
+			"On this stage towers branch at level 5 into Assault or Control specializations.",
+			Color(0.92, 0.82, 0.40),
+			1,
+			2.8
+		)
+		return
+	if mini_bosses_pending > 0 and current_boss_type < 0:
+		_emit_warning(
+			"Mini Boss Wave",
+			"Elite units detected: %s. Focus burst damage and control." % _mini_boss_preview_text(),
+			Color(0.98, 0.66, 0.30),
+			2,
+			3.6
+		)
 
 # ─── Wave System ──────────────────────────────────────────────────────────────
 
@@ -746,6 +1273,12 @@ func _start_next_wave() -> void:
 	wave_banner_timer = 1.5
 	wave_changed.emit(wave)
 	base_hp_before_wave = base_hp
+	_update_day_night_cycle()
+	if double_base_active:
+		_retarget_paths_for_active_bases()
+		_sync_map_visuals()
+	elif day_night_changed_this_wave:
+		_sync_map_visuals()
 
 	# Endless scaling
 	if is_endless and wave > 10:
@@ -755,13 +1288,15 @@ func _start_next_wave() -> void:
 		enemy_speed_mult = 1.0 + tier * 0.05
 		spawn_rate_mult = 1.0 + tier * 0.08
 
-	# Wave modifier (random from wave 3)
-	if wave >= 3 and randf() < 0.4:
-		var mods := [GameData.WaveModifier.FAST, GameData.WaveModifier.ARMORED,
-					 GameData.WaveModifier.REGEN, GameData.WaveModifier.SWARM,
-					 GameData.WaveModifier.RICH, GameData.WaveModifier.SHIELDED,
-					 GameData.WaveModifier.BOSS_RALLY, GameData.WaveModifier.BERSERKER]
-		current_wave_modifier = mods[randi() % mods.size()]
+	# Wave modifier
+	if is_daily_challenge and not daily_challenge_modifiers.is_empty():
+		current_wave_modifier = daily_challenge_modifiers[wave % daily_challenge_modifiers.size()]
+	elif wave >= 3 and randf() < 0.4:
+		var mods: Array = []
+		for mod in GameData.WaveModifier.values():
+			if mod != GameData.WaveModifier.NONE:
+				mods.append(mod)
+		current_wave_modifier = mods[randi() % mods.size()] if not mods.is_empty() else GameData.WaveModifier.NONE
 	else:
 		current_wave_modifier = GameData.WaveModifier.NONE
 
@@ -771,19 +1306,34 @@ func _start_next_wave() -> void:
 	AchievementManager.on_maps_played(SaveManager.get_maps_played().size())
 
 	# Boss wave check
-	if is_boss_rush or (wave % boss_interval == 0):
+	if is_boss_gauntlet or is_boss_rush or (wave % boss_interval == 0):
 		if boss_pool.is_empty():
 			boss_pool = GameData.BossType.values().duplicate()
 			boss_pool.shuffle()
 		current_boss_type = boss_pool.pop_front()
+		mini_bosses_pending = 0
+		mini_boss_wave_queue.clear()
+		elite_spawn_pending = false
 		enemies_remaining = 1  # Boss + minions will be spawned together
 		_trigger_shake(0.4, 12.0)
 	else:
 		current_boss_type = -1
+		non_boss_wave_counter += 1
+		elite_spawn_pending = non_boss_wave_counter >= 5
+		if elite_spawn_pending:
+			non_boss_wave_counter = 0
 		var count: int = int((3 + wave * 2) * spawn_rate_mult)
 		count = mini(count, 100)
 		if current_wave_modifier == GameData.WaveModifier.SWARM:
 			count *= 2
+		if elite_spawn_pending:
+			count += 1
+		mini_bosses_pending = 0
+		mini_boss_wave_queue.clear()
+		if mini_boss_interval > 0 and wave % mini_boss_interval == 0:
+			mini_bosses_pending = mini(4, 1 + int(wave / 14))
+			_prepare_mini_boss_wave(mini_bosses_pending)
+			count += mini_bosses_pending
 		enemies_remaining = count
 
 	wave_banner_shown.emit(wave, current_wave_modifier)
@@ -796,7 +1346,7 @@ func _start_next_wave() -> void:
 
 func _on_wave_complete() -> void:
 	wave_in_progress = false
-	wave_timer = wave_delay if not is_boss_rush else 3.0
+	wave_timer = wave_delay if not (is_boss_rush or is_boss_gauntlet) else 3.0
 
 	# Campaign win check
 	if not campaign_level.is_empty():
@@ -806,7 +1356,7 @@ func _on_wave_complete() -> void:
 			return
 
 	AchievementManager.on_wave_complete(wave, base_hp, max_base_hp, base_hp_before_wave,
-		is_endless, map_type, false, game_speed)
+		is_endless, map_type, is_randomizer_mode, game_speed)
 
 	# Gold interest
 	var interest: int = int(gold * interest_rate)
@@ -824,6 +1374,17 @@ func _on_wave_complete() -> void:
 
 # ─── Enemy Spawning ───────────────────────────────────────────────────────────
 
+func _prepare_mini_boss_wave(count: int) -> void:
+	mini_boss_wave_queue.clear()
+	var pool: Array[String] = mini_boss_archetypes.duplicate()
+	if pool.is_empty():
+		pool = ["juggernaut", "raider", "warlock"]
+	for i in range(count):
+		var archetype := pool[(wave + i + randi()) % pool.size()]
+		if wave < 8 and archetype == "warlock":
+			archetype = "raider"
+		mini_boss_wave_queue.append(archetype)
+
 func _spawn_enemy() -> void:
 	if paths.is_empty():
 		return
@@ -838,6 +1399,13 @@ func _spawn_enemy() -> void:
 	if current_boss_type >= 0:
 		_configure_boss(e_node, path_idx, wave_scale)
 		current_boss_type = -1
+		return
+	if mini_bosses_pending > 0:
+		var archetype := "juggernaut"
+		if not mini_boss_wave_queue.is_empty():
+			archetype = str(mini_boss_wave_queue.pop_front())
+		_configure_mini_boss(e_node, path_idx, wave_scale, archetype)
+		mini_bosses_pending -= 1
 		return
 
 	# Regular enemy
@@ -857,7 +1425,8 @@ func _spawn_enemy() -> void:
 		GameData.WaveModifier.RICH:     gold_mod = 2.0
 		GameData.WaveModifier.BOSS_RALLY: spd_mod = 1.4
 
-	var hp: float = edata["hp"] * wave_scale * enemy_hp_mult * hp_mod
+	var night_hp_mult := 1.2 if is_night_cycle else 1.0
+	var hp: float = edata["hp"] * wave_scale * enemy_hp_mult * hp_mod * night_hp_mult
 	var r_offset := Vector2(randf_range(-20, 20), randf_range(-20, 20))
 
 	e_node.setup(
@@ -875,7 +1444,97 @@ func _spawn_enemy() -> void:
 
 	if current_wave_modifier == GameData.WaveModifier.SHIELDED:
 		e_node.shield_timer = 3.0
+	if elite_spawn_pending:
+		_apply_elite_enemy(e_node)
+		elite_spawn_pending = false
 
+	e_node.died.connect(_on_enemy_died.bind(e_node))
+	e_node.reached_base.connect(_on_enemy_reached_base.bind(e_node))
+
+func _apply_elite_enemy(enemy_node: Node) -> void:
+	enemy_node.max_hp *= 3.0
+	enemy_node.hp = enemy_node.max_hp
+	enemy_node.damage *= 1.5
+	enemy_node.gold_reward = int(enemy_node.gold_reward * 2.0)
+	enemy_node.enemy_size *= 1.12
+	enemy_node.set("is_elite", true)
+	_spawn_text(enemy_node.position.x, enemy_node.position.y - 42.0, "ELITE", Color(1.0, 0.82, 0.28), 1.2, 20)
+
+func _mini_boss_archetype_data(archetype: String) -> Dictionary:
+	match archetype:
+		"juggernaut":
+			return {
+				"types": [GameData.EnemyType.GOLEM_SHARD, GameData.EnemyType.MINI_ORC, GameData.EnemyType.ARMORED_GOLEM],
+				"hp_mult": 3.0 + wave * 0.18,
+				"speed_mult": 0.76,
+				"damage_mult": 1.9 + wave * 0.04,
+				"gold_bonus": 10.0,
+				"regen": 0.7 + wave * 0.08,
+				"shield": 2.6,
+				"charge": false,
+			}
+		"raider":
+			return {
+				"types": [GameData.EnemyType.MINI_DEMON, GameData.EnemyType.MINI_DRAGON, GameData.EnemyType.BERSERKER],
+				"hp_mult": 2.1 + wave * 0.13,
+				"speed_mult": 1.32,
+				"damage_mult": 1.5 + wave * 0.03,
+				"gold_bonus": 8.0,
+				"regen": 0.0,
+				"shield": 0.8,
+				"charge": true,
+			}
+		"warlock":
+			return {
+				"types": [GameData.EnemyType.COMMANDER, GameData.EnemyType.SHADOW, GameData.EnemyType.MINI_SKELETON],
+				"hp_mult": 2.6 + wave * 0.15,
+				"speed_mult": 0.94,
+				"damage_mult": 1.7 + wave * 0.04,
+				"gold_bonus": 9.0,
+				"regen": 2.0 + wave * 0.2,
+				"shield": 1.6,
+				"charge": false,
+			}
+		_:
+			return {
+				"types": [GameData.EnemyType.MINI_ORC, GameData.EnemyType.MINI_DEMON],
+				"hp_mult": 2.5 + wave * 0.14,
+				"speed_mult": 1.0,
+				"damage_mult": 1.6 + wave * 0.03,
+				"gold_bonus": 8.0,
+				"regen": 0.0,
+				"shield": 1.0,
+				"charge": false,
+			}
+
+func _configure_mini_boss(e_node: Node, path_idx: int, wave_scale: float, archetype: String) -> void:
+	var archetype_data: Dictionary = _mini_boss_archetype_data(archetype)
+	var mini_types: Array = archetype_data.get("types", [GameData.EnemyType.MINI_ORC])
+	var etype: int = int(mini_types[randi() % mini_types.size()])
+	var edata: Dictionary = GameData.get_enemy(etype)
+	var spawn_pt: Vector2 = paths[path_idx][0]
+	var night_hp_mult := 1.2 if is_night_cycle else 1.0
+	var hp: float = edata["hp"] * wave_scale * enemy_hp_mult * float(archetype_data.get("hp_mult", 2.8)) * night_hp_mult
+	var speed_mod: float = float(archetype_data.get("speed_mult", 1.0)) + randf_range(-0.06, 0.06)
+	var gold_reward: int = int((edata["gold"] + float(archetype_data.get("gold_bonus", 8.0)) + wave * 1.3) * gold_mult * skill_gold_bonus)
+	var damage_out: float = edata["dmg"] * wave_scale * enemy_dmg_mult * float(archetype_data.get("damage_mult", 1.7))
+	var regen: float = float(archetype_data.get("regen", 0.0))
+	e_node.setup(
+		etype,
+		spawn_pt + Vector2(randf_range(-26, 26), randf_range(-26, 26)),
+		path_idx,
+		paths[path_idx],
+		edata["speed"] * enemy_speed_mult * speed_mod,
+		hp,
+		gold_reward,
+		damage_out,
+		edata["emoji"],
+		regen
+	)
+	e_node.shield_timer = float(archetype_data.get("shield", 1.0))
+	if bool(archetype_data.get("charge", false)):
+		e_node.charge_speed_mult = 1.35
+		e_node.charge_timer = 2.4
 	e_node.died.connect(_on_enemy_died.bind(e_node))
 	e_node.reached_base.connect(_on_enemy_reached_base.bind(e_node))
 
@@ -886,7 +1545,8 @@ func _configure_boss(e_node: Node, path_idx: int, wave_scale: float) -> void:
 	var bdata: Dictionary = GameData.get_boss(bt)
 	var spawn_pt: Vector2 = paths[path_idx][0]
 
-	var hp: float = (bdata["hp"] + wave * 40.0) * wave_scale * enemy_hp_mult
+	var night_hp_mult := 1.2 if is_night_cycle else 1.0
+	var hp: float = (bdata["hp"] + wave * 40.0) * wave_scale * enemy_hp_mult * night_hp_mult
 	var boss_gold: int = int((bdata["gold"] + wave * 10.0) * wave_scale * gold_mult * skill_gold_bonus)
 
 	e_node.setup_boss(
@@ -913,7 +1573,7 @@ func _configure_boss(e_node: Node, path_idx: int, wave_scale: float) -> void:
 		var md: Dictionary = GameData.get_enemy(mtype)
 		var moffset := Vector2(randf_range(-40, 40), randf_range(-40, 40))
 		m.setup(mtype, spawn_pt + moffset, path_idx, paths[path_idx],
-			md["speed"] * enemy_speed_mult, md["hp"] * wave_scale * enemy_hp_mult,
+			md["speed"] * enemy_speed_mult, md["hp"] * wave_scale * enemy_hp_mult * night_hp_mult,
 			int(md["gold"] * wave_scale * gold_mult * skill_gold_bonus),
 			md["dmg"] * wave_scale * enemy_dmg_mult,
 			md["emoji"], 0.0)
@@ -942,13 +1602,65 @@ func _pick_enemy_type() -> int:
 func _update_enemies(dt: float) -> void:
 	var freeze_mult: float = 0.2 if freeze_timer > 0 else 1.0
 	var all_enemies: Array = enemy_container.get_children()
+	var visible_enemies: Array = []
+	var tower_range_mult := 0.9 if is_night_cycle else 1.0
 
+	for enemy_node in all_enemies:
+		var visible_enemy: bool = true
+		if fog_of_war_active:
+			visible_enemy = _is_enemy_revealed_for_fog(enemy_node)
+		enemy_node.visible = visible_enemy
+		if visible_enemy:
+			visible_enemies.append(enemy_node)
+
+	if is_instance_valid(player_node) and player_node.has_method("tick"):
+		player_node.tick(dt, visible_enemies, self)
+
+	_apply_tower_synergy_bonuses()
 	for tower_node in tower_container.get_children():
-		tower_node.tick(dt, all_enemies, freeze_mult, target_mode,
-						skill_tower_damage_bonus, self)
+		tower_node.tick(dt, visible_enemies, freeze_mult, tower_node.target_mode,
+						tower_range_mult, skill_tower_damage_bonus, self)
 
 	for enemy_node in all_enemies:
 		enemy_node.tick(dt * freeze_mult)
+
+func _apply_tower_synergy_bonuses() -> void:
+	var towers: Array = tower_container.get_children()
+	if towers.is_empty():
+		return
+	for tower_node in towers:
+		var stacks := 0
+		for other in towers:
+			if other == tower_node:
+				continue
+			if other.tower_type != tower_node.tower_type:
+				continue
+			if tower_node.position.distance_to(other.position) <= 140.0:
+				stacks += 1
+				if stacks >= 3:
+					break
+		if tower_node.has_method("set_synergy_stacks"):
+			tower_node.set_synergy_stacks(stacks)
+
+func _is_enemy_revealed_for_fog(enemy_node: Node2D) -> bool:
+	if enemy_node == null or enemy_node.is_dead():
+		return false
+	var pos: Vector2 = enemy_node.position
+	for base_pos in _get_active_base_positions():
+		if pos.distance_to(base_pos) <= fog_base_reveal_radius:
+			return true
+	for tower_node in tower_container.get_children():
+		var reveal_radius: float = maxf(tower_node.attack_range * fog_tower_reveal_mult, 98.0)
+		if pos.distance_to(tower_node.position) <= reveal_radius:
+			return true
+	if is_instance_valid(player_node):
+		if pos.distance_to(player_node.position) <= 110.0:
+			return true
+	if placement_active and placement_preview_pos.x >= 0:
+		var placement_reveal: float = maxf(placement_preview_range * 0.85, 96.0)
+		if pos.distance_to(placement_preview_pos) <= placement_reveal:
+			return true
+	return false
 
 func _apply_terrain_effects(dt: float) -> void:
 	if terrain_zones.is_empty():
@@ -984,6 +1696,7 @@ func _apply_terrain_effects(dt: float) -> void:
 # ─── Tower Placement ──────────────────────────────────────────────────────────
 
 func start_placement(tower_type: int) -> void:
+	cancel_power_targeting()
 	placement_active = true
 	placement_tower_type = tower_type
 	placement_preview_range = GameData.get_tower(tower_type).get("range", 200.0)
@@ -997,10 +1710,26 @@ func cancel_placement() -> void:
 	placement_preview_valid = false
 	placement_mode_changed.emit(false, placement_tower_type)
 
+func start_power_targeting(power_type: int) -> void:
+	cancel_placement()
+	power_targeting_active = true
+	power_targeting_type = power_type
+	power_target_preview_pos = Vector2(-999, -999)
+	power_targeting_mode_changed.emit(true, power_type)
+
+func cancel_power_targeting() -> void:
+	if not power_targeting_active:
+		return
+	power_targeting_active = false
+	power_target_preview_pos = Vector2(-999, -999)
+	var prev_type := power_targeting_type
+	power_targeting_type = -1
+	power_targeting_mode_changed.emit(false, prev_type)
+
 func try_place_tower(pos: Vector2) -> bool:
 	pos = _snap_to_grid(pos)
 	var tdata := GameData.get_tower(placement_tower_type)
-	var cost: int = tdata["cost"]
+	var cost: int = get_tower_cost(placement_tower_type)
 
 	if gold < cost:
 		_spawn_text(pos.x, pos.y - 40, "Not enough gold!", Color(1, 0.3, 0.3), 1.0, 24)
@@ -1017,9 +1746,9 @@ func try_place_tower(pos: Vector2) -> bool:
 				get_node("/root/SoundManager").play_error()
 			return false
 
-	# Distance from base
-	if pos.distance_to(base_position) < 60:
-		_spawn_text(pos.x, pos.y - 40, "Too close to base!", Color(1, 0.5, 0.3), 1.0, 22)
+	# Distance from bases
+	if _is_too_close_to_any_base(pos, 60.0):
+		_spawn_text(pos.x, pos.y - 40, "Too close to base core!", Color(1, 0.5, 0.3), 1.0, 22)
 		if has_node("/root/SoundManager"):
 			get_node("/root/SoundManager").play_error()
 		return false
@@ -1056,7 +1785,14 @@ func try_place_tower(pos: Vector2) -> bool:
 	var t_node = tower_scene.instantiate()
 	tower_container.add_child(t_node)
 	t_node.position = pos
-	t_node.setup(placement_tower_type, tdata, skill_tower_damage_bonus, skill_ability_cd_mult)
+	t_node.setup(
+		placement_tower_type,
+		tdata,
+		skill_tower_damage_bonus,
+		skill_ability_cd_mult,
+		target_mode,
+		branching_active
+	)
 	t_node.ability_fired.connect(_on_tower_ability.bind(t_node))
 	t_node.pressed.connect(_on_tower_pressed.bind(t_node))
 
@@ -1067,6 +1803,9 @@ func try_place_tower(pos: Vector2) -> bool:
 			types.append(t.tower_type)
 	towers_placed_types = types
 	AchievementManager.on_tower_placed(_tower_count(), types)
+	SaveManager.add_stat("lifetime_towers", 1)
+	var tower_name := str(GameData.TowerType.keys()[placement_tower_type])
+	SaveManager.add_stat("tower_count_%s" % tower_name, 1)
 	if has_node("/root/SoundManager"):
 		get_node("/root/SoundManager").play_place()
 
@@ -1074,10 +1813,10 @@ func try_place_tower(pos: Vector2) -> bool:
 	return true
 
 func _snap_to_grid(pos: Vector2) -> Vector2:
-	var snapped := Vector2(round(pos.x / 40.0) * 40.0, round(pos.y / 40.0) * 40.0)
-	snapped.x = clampf(snapped.x, 40.0, screen_w - 40.0)
-	snapped.y = clampf(snapped.y, 120.0, screen_h - 140.0)
-	return snapped
+	return Vector2(
+		clampf(pos.x, 34.0, screen_w - 34.0),
+		clampf(pos.y, 108.0, screen_h - 126.0)
+	)
 
 func _update_placement_preview(pos: Vector2) -> void:
 	if not placement_active:
@@ -1087,8 +1826,8 @@ func _update_placement_preview(pos: Vector2) -> void:
 	placement_preview_valid = _check_placement_valid(placement_preview_pos)
 
 func sell_tower(tower_node: Node) -> void:
-	var tdata := GameData.get_tower(tower_node.tower_type)
-	var sell_val := GameData.tower_sell_value(tdata["cost"], tower_node.level, skill_sell_bonus)
+	var base_cost := get_tower_cost(tower_node.tower_type)
+	var sell_val := GameData.tower_sell_value(base_cost, tower_node.level, skill_sell_bonus)
 	_add_gold(sell_val)
 	_spawn_text(tower_node.position.x, tower_node.position.y - 40,
 		"+%dg sold!" % sell_val, Color(1.0, 0.85, 0.0), 1.2, 26)
@@ -1099,13 +1838,13 @@ func upgrade_tower(tower_node: Node) -> bool:
 		return false
 	if not campaign_level.is_empty() and not campaign_level.get("upgrades", true):
 		return false
-	var tdata := GameData.get_tower(tower_node.tower_type)
-	var cost := GameData.tower_upgrade_cost(tdata["cost"], tower_node.level)
+	var base_cost := get_tower_cost(tower_node.tower_type)
+	var cost := GameData.tower_upgrade_cost(base_cost, tower_node.level)
 	if gold < cost:
 		return false
 	gold -= cost
 	gold_changed.emit(gold)
-	tower_node.upgrade(skill_tower_damage_bonus, skill_ability_cd_mult)
+	tower_node.upgrade(skill_tower_damage_bonus, skill_ability_cd_mult, branching_active)
 	if tower_node.level >= 10:
 		AchievementManager.on_tower_maxed()
 	# Check if all towers are upgraded (level >= 2)
@@ -1114,6 +1853,87 @@ func upgrade_tower(tower_node: Node) -> bool:
 	return true
 
 # ─── Power Usage ──────────────────────────────────────────────────────────────
+
+func upgrade_player_damage() -> bool:
+	if not campaign_level.is_empty() and not campaign_level.get("upgrades", true):
+		return false
+	var cost := player_damage_level * 25
+	if gold < cost:
+		return false
+	gold -= cost
+	player_damage_level += 1
+	player_upgrades_bought["damage"] = true
+	_check_upgrade_all_achievement()
+	if is_instance_valid(player_node):
+		player_node.attack_damage += 5.0
+	gold_changed.emit(gold)
+	_spawn_text(base_position.x - 84.0, base_position.y - 104.0, "ATK UP", Color(0.98, 0.80, 0.44), 0.9, 20)
+	return true
+
+func upgrade_player_speed() -> bool:
+	if not campaign_level.is_empty() and not campaign_level.get("upgrades", true):
+		return false
+	var cost := player_speed_level * 20
+	if gold < cost:
+		return false
+	gold -= cost
+	player_speed_level += 1
+	player_upgrades_bought["speed"] = true
+	_check_upgrade_all_achievement()
+	if is_instance_valid(player_node):
+		player_node.move_speed += 30.0
+	gold_changed.emit(gold)
+	_spawn_text(base_position.x - 16.0, base_position.y - 104.0, "SPD UP", Color(0.70, 0.92, 1.0), 0.9, 20)
+	return true
+
+func upgrade_player_hp() -> bool:
+	if not campaign_level.is_empty() and not campaign_level.get("upgrades", true):
+		return false
+	var cost := player_hp_level * 30
+	if gold < cost:
+		return false
+	gold -= cost
+	player_hp_level += 1
+	player_upgrades_bought["hp"] = true
+	_check_upgrade_all_achievement()
+	if is_instance_valid(player_node):
+		player_node.max_hp += 25.0
+		player_node.hp = player_node.max_hp
+	gold_changed.emit(gold)
+	_spawn_text(base_position.x + 48.0, base_position.y - 104.0, "HP UP", Color(0.72, 1.0, 0.80), 0.9, 20)
+	return true
+
+func upgrade_base_hp() -> bool:
+	if not campaign_level.is_empty() and not campaign_level.get("upgrades", true):
+		return false
+	var cost := base_hp_level * 40
+	if gold < cost:
+		return false
+	gold -= cost
+	base_hp_level += 1
+	player_upgrades_bought["base"] = true
+	_check_upgrade_all_achievement()
+	max_base_hp += 30.0
+	base_hp = minf(max_base_hp, base_hp + 30.0)
+	gold_changed.emit(gold)
+	base_hp_changed.emit(base_hp, max_base_hp)
+	_spawn_text(base_position.x, base_position.y - 132.0, "BASE UP", Color(0.86, 0.94, 1.0), 1.0, 22)
+	return true
+
+func repair_base() -> bool:
+	var cost := 20
+	if gold < cost:
+		return false
+	if base_hp >= max_base_hp:
+		return false
+	gold -= cost
+	base_hp = minf(max_base_hp, base_hp + 30.0)
+	repairs_this_run += 1
+	AchievementManager.on_base_healed(repairs_this_run)
+	gold_changed.emit(gold)
+	base_hp_changed.emit(base_hp, max_base_hp)
+	_spawn_text(base_position.x, base_position.y - 64.0, "REPAIR +30", Color(0.52, 0.94, 0.58), 1.0, 24)
+	return true
 
 func use_power(power_type: int, target_pos: Vector2) -> bool:
 	var cd_remaining: float = power_cooldowns.get(power_type, 0.0)
@@ -1134,9 +1954,10 @@ func use_power(power_type: int, target_pos: Vector2) -> bool:
 		return false
 	gold -= cost
 	gold_changed.emit(gold)
-	power_cooldowns[power_type] = pdata["cooldown"] * skill_ability_cd_mult
+	power_cooldowns[power_type] = get_power_cooldown(power_type) * skill_ability_cd_mult
 	AchievementManager.on_power_used(power_type)
 	powers_used_this_run[power_type] = true
+	SaveManager.add_stat("lifetime_powers_used", 1)
 	if has_node("/root/SoundManager"):
 		get_node("/root/SoundManager").play_power(power_type)
 
@@ -1148,7 +1969,7 @@ func use_power(power_type: int, target_pos: Vector2) -> bool:
 	return true
 
 func _power_fireball(_pos: Vector2) -> void:
-	var base_dmg := 50.0
+	var base_dmg := 50.0 * randomizer_power_damage_mult
 	for e in enemy_container.get_children():
 		if not e.is_dead():
 			e.take_damage(base_dmg, GameData.DamageType.FIRE, "power")
@@ -1174,7 +1995,7 @@ func _power_lightning(pos: Vector2) -> void:
 			targets.append(e)
 	targets.sort_custom(func(a, b): return a.position.distance_to(pos) < b.position.distance_to(pos))
 	var chain_count := mini(5, targets.size())
-	var dmg := 80.0
+	var dmg := 80.0 * randomizer_power_damage_mult
 	for i in range(chain_count):
 		targets[i].take_damage(dmg, GameData.DamageType.ELECTRIC, "power")
 		dmg *= 0.8
@@ -1223,7 +2044,7 @@ func _on_enemy_reached_base(enemy_node: Node) -> void:
 	base_hp_changed.emit(base_hp, max_base_hp)
 	_trigger_shake(0.25, 8.0)
 	_trigger_base_flash(Color(1.0, 0.2, 0.2, 0.15))
-	_spawn_text(base_position.x, base_position.y - 40,
+	_spawn_text(enemy_node.position.x, enemy_node.position.y - 40,
 		"-%.0f HP" % dmg, Color(1.0, 0.2, 0.2), 1.2, 28)
 	enemy_node.queue_free()
 
@@ -1232,15 +2053,25 @@ func _on_enemy_reached_base(enemy_node: Node) -> void:
 
 func _trigger_game_over() -> void:
 	game_over = true
+	clear_saved_run()
+	if difficulty == 1 and wave >= 10:
+		SaveManager.set_val("normal_beaten", true)
 	var is_new_high := SaveManager.submit_score(score)
 	SaveManager.submit_wave(wave)
 	if is_endless:
 		SaveManager.submit_endless(wave)
+	if is_boss_rush:
+		SaveManager.submit_boss_rush(wave)
+	if diamonds_this_run > 0:
+		SaveManager.add_diamonds(diamonds_this_run)
+		SaveManager.add_stat("lifetime_diamonds", diamonds_this_run)
 	SaveManager.add_stat("lifetime_kills", total_kills)
+	SaveManager.add_stat("lifetime_bosses", bosses_killed_this_run)
 	SaveManager.add_stat("lifetime_games", 1)
 	SaveManager.add_stat("lifetime_waves", wave)
 	SaveManager.add_stat("lifetime_score", score)
 	SaveManager.add_stat("lifetime_gold", total_gold_earned)
+	SaveManager.set_stat_max("lifetime_best_combo", best_combo)
 	SaveManager.flush()
 	game_over_triggered.emit(score, wave, is_new_high)
 
@@ -1371,8 +2202,17 @@ func _spawn_floating_text_node(x: float, y: float, text: String, color: Color, d
 	ft.setup(text, color, duration, size)
 
 func _trigger_shake(duration: float, intensity: float) -> void:
+	if not SaveManager.get_bool("screen_shake", true):
+		return
 	shake_timer = duration
 	shake_intensity = intensity
+
+func _check_upgrade_all_achievement() -> void:
+	if bool(player_upgrades_bought.get("damage", false)) \
+	and bool(player_upgrades_bought.get("speed", false)) \
+	and bool(player_upgrades_bought.get("hp", false)) \
+	and bool(player_upgrades_bought.get("base", false)):
+		AchievementManager.check("upgrade_all")
 
 func _enemy_count() -> int:
 	return enemy_container.get_child_count()
@@ -1388,6 +2228,289 @@ func _enemies_in_range(pos: Vector2, radius: float, max_count: int) -> Array:
 			if result.size() >= max_count:
 				break
 	return result
+
+func move_player_to(pos: Vector2) -> void:
+	if not is_instance_valid(player_node) or not player_node.has_method("set_move_target"):
+		return
+	player_node.set_move_target(_snap_to_grid(pos))
+
+func use_dash() -> bool:
+	if not is_instance_valid(player_node):
+		return false
+	var enemies: Array = []
+	for enemy_node in enemy_container.get_children():
+		if not enemy_node.is_dead():
+			enemies.append(enemy_node)
+	var target_pos: Vector2 = _snap_to_grid(Vector2(screen_w * 0.5, screen_h * 0.5))
+	var move_target_variant: Variant = player_node.get("move_target")
+	if move_target_variant is Vector2:
+		target_pos = move_target_variant
+	if player_node.has_method("dash_toward"):
+		return player_node.dash_toward(target_pos, enemies, self)
+	return false
+
+func get_dash_cooldown_remaining() -> float:
+	if not is_instance_valid(player_node) or not player_node.has_method("get_dash_cooldown_remaining"):
+		return 0.0
+	return player_node.get_dash_cooldown_remaining()
+
+func has_saved_run() -> bool:
+	return SaveManager.get_bool("save_has_run", false)
+
+func clear_saved_run() -> void:
+	SaveManager.set_val("save_has_run", false)
+	SaveManager.flush()
+
+func save_game() -> void:
+	SaveManager.set_val("save_has_run", true)
+	SaveManager.set_val("save_wave", wave)
+	SaveManager.set_val("save_gold", gold)
+	SaveManager.set_val("save_score", score)
+	SaveManager.set_val("save_total_kills", total_kills)
+	SaveManager.set_val("save_total_gold_earned", total_gold_earned)
+	SaveManager.set_val("save_base_hp", base_hp)
+	SaveManager.set_val("save_max_base_hp", max_base_hp)
+	SaveManager.set_val("save_difficulty", difficulty)
+	SaveManager.set_val("save_map", map_type)
+	SaveManager.set_val("save_is_endless", is_endless)
+	SaveManager.set_val("save_is_boss_rush", is_boss_rush)
+	SaveManager.set_val("save_is_boss_gauntlet", is_boss_gauntlet)
+	SaveManager.set_val("save_is_daily_challenge", is_daily_challenge)
+	SaveManager.set_val("save_daily_seed", daily_challenge_seed)
+	SaveManager.set_val("save_daily_mods", daily_challenge_modifiers.duplicate())
+	SaveManager.set_val("save_is_randomizer_mode", is_randomizer_mode)
+	SaveManager.set_val("save_randomizer_seed", randomizer_seed)
+	SaveManager.set_val("save_randomizer_tower_costs", randomizer_tower_costs.duplicate())
+	SaveManager.set_val("save_randomizer_power_cooldowns", randomizer_power_cooldowns.duplicate())
+	SaveManager.set_val("save_randomizer_power_damage_mult", randomizer_power_damage_mult)
+	SaveManager.set_val("save_randomizer_start_gold", randomizer_start_gold)
+	SaveManager.set_val("save_enemy_hp_mult", enemy_hp_mult)
+	SaveManager.set_val("save_enemy_dmg_mult", enemy_dmg_mult)
+	SaveManager.set_val("save_enemy_speed_mult", enemy_speed_mult)
+	SaveManager.set_val("save_gold_mult", gold_mult)
+	SaveManager.set_val("save_spawn_rate_mult", spawn_rate_mult)
+	SaveManager.set_val("save_boss_interval", boss_interval)
+	SaveManager.set_val("save_non_boss_wave_counter", non_boss_wave_counter)
+	SaveManager.set_val("save_is_night_cycle", is_night_cycle)
+	SaveManager.set_val("save_player_damage_level", player_damage_level)
+	SaveManager.set_val("save_player_speed_level", player_speed_level)
+	SaveManager.set_val("save_player_hp_level", player_hp_level)
+	SaveManager.set_val("save_base_hp_level", base_hp_level)
+	SaveManager.set_val("save_repairs", repairs_this_run)
+	SaveManager.set_val("save_bosses_killed_this_run", bosses_killed_this_run)
+	SaveManager.set_val("save_diamonds_this_run", diamonds_this_run)
+	SaveManager.set_val("save_best_combo", best_combo)
+	SaveManager.set_val("save_combo_count", combo_count)
+	SaveManager.set_val("save_combo_timer", combo_timer)
+	SaveManager.set_val("save_combo_multiplier", combo_multiplier)
+	SaveManager.set_val("save_towers_placed_types", towers_placed_types.duplicate())
+	SaveManager.set_val("save_ability_types_used_run", ability_types_used_run.duplicate())
+	SaveManager.set_val("save_powers_used_this_run", powers_used_this_run.duplicate())
+	SaveManager.set_val("save_traps_placed_run", traps_placed_run)
+	SaveManager.set_val("save_towers", _serialize_towers())
+	if is_instance_valid(player_node):
+		SaveManager.set_val("save_player_hp", float(player_node.hp))
+		SaveManager.set_val("save_player_max_hp", float(player_node.max_hp))
+		SaveManager.set_val("save_player_damage", float(player_node.attack_damage))
+		SaveManager.set_val("save_player_speed", float(player_node.move_speed))
+		SaveManager.set_val("save_player_range", float(player_node.attack_range))
+	var saved_power_cooldowns: Dictionary = {}
+	for power_type in power_cooldowns.keys():
+		saved_power_cooldowns[power_type] = power_cooldowns[power_type]
+	SaveManager.set_val("save_power_cooldowns", saved_power_cooldowns)
+	SaveManager.flush()
+
+func _serialize_towers() -> Array:
+	var serialized: Array = []
+	for tower_node in tower_container.get_children():
+		if not is_instance_valid(tower_node):
+			continue
+		serialized.append({
+			"x": float(tower_node.position.x),
+			"y": float(tower_node.position.y),
+			"tower_type": int(tower_node.tower_type),
+			"level": int(tower_node.level),
+			"target_mode": int(tower_node.target_mode),
+			"branch": int(tower_node.branch),
+			"branch_name": str(tower_node.branch_name),
+			"branching_enabled": bool(tower_node.branching_enabled),
+			"fire_timer": float(tower_node.fire_timer),
+			"ability_timer": float(tower_node.ability_timer),
+			"damage": float(tower_node.damage),
+			"attack_range": float(tower_node.attack_range),
+			"fire_rate": float(tower_node.fire_rate),
+			"damage_type": int(tower_node.damage_type),
+			"ability_cooldown": float(tower_node.ability_cooldown),
+		})
+	return serialized
+
+func _restore_towers_from_save(saved_data: Variant) -> void:
+	if not (saved_data is Array):
+		return
+	for tower_node in tower_container.get_children():
+		tower_node.queue_free()
+	for raw in saved_data:
+		if not (raw is Dictionary):
+			continue
+		var data: Dictionary = raw
+		var ttype := int(data.get("tower_type", GameData.TowerType.ARROW))
+		var tdata := GameData.get_tower(ttype)
+		var t_node = tower_scene.instantiate()
+		tower_container.add_child(t_node)
+		t_node.position = _snap_to_grid(Vector2(float(data.get("x", 0.0)), float(data.get("y", 0.0))))
+		t_node.setup(
+			ttype,
+			tdata,
+			skill_tower_damage_bonus,
+			skill_ability_cd_mult,
+			int(data.get("target_mode", target_mode)),
+			bool(data.get("branching_enabled", branching_active))
+		)
+		t_node.level = int(data.get("level", t_node.level))
+		t_node.target_mode = int(data.get("target_mode", t_node.target_mode))
+		t_node.branch = int(data.get("branch", t_node.branch))
+		t_node.branch_name = str(data.get("branch_name", t_node.branch_name))
+		t_node.fire_timer = float(data.get("fire_timer", t_node.fire_timer))
+		t_node.ability_timer = float(data.get("ability_timer", t_node.ability_timer))
+		t_node.damage = float(data.get("damage", t_node.damage))
+		t_node.attack_range = float(data.get("attack_range", t_node.attack_range))
+		t_node.fire_rate = float(data.get("fire_rate", t_node.fire_rate))
+		t_node.damage_type = int(data.get("damage_type", t_node.damage_type))
+		t_node.ability_cooldown = float(data.get("ability_cooldown", t_node.ability_cooldown))
+		if t_node.has_method("_update_level_label"):
+			t_node.call("_update_level_label")
+		t_node.queue_redraw()
+		t_node.ability_fired.connect(_on_tower_ability.bind(t_node))
+		t_node.pressed.connect(_on_tower_pressed.bind(t_node))
+
+func load_game() -> bool:
+	if not has_saved_run():
+		return false
+	reset()
+	map_type = SaveManager.get_int("save_map", GameData.MapType.CLASSIC)
+	difficulty = SaveManager.get_int("save_difficulty", 1)
+	is_endless = SaveManager.get_bool("save_is_endless", false)
+	is_boss_rush = SaveManager.get_bool("save_is_boss_rush", false)
+	is_boss_gauntlet = SaveManager.get_bool("save_is_boss_gauntlet", false)
+	is_daily_challenge = SaveManager.get_bool("save_is_daily_challenge", false)
+	daily_challenge_seed = SaveManager.get_int("save_daily_seed", 0)
+	daily_challenge_modifiers = []
+	var daily_mods_var: Variant = SaveManager.get_val("save_daily_mods", [])
+	if daily_mods_var is Array:
+		for mod in daily_mods_var:
+			daily_challenge_modifiers.append(int(mod))
+	is_randomizer_mode = SaveManager.get_bool("save_is_randomizer_mode", false)
+	randomizer_seed = SaveManager.get_int("save_randomizer_seed", 0)
+	randomizer_tower_costs = {}
+	var tower_costs_var: Variant = SaveManager.get_val("save_randomizer_tower_costs", {})
+	if tower_costs_var is Dictionary:
+		for key in tower_costs_var.keys():
+			randomizer_tower_costs[int(key)] = int(tower_costs_var[key])
+	randomizer_power_cooldowns = {}
+	var random_cds_var: Variant = SaveManager.get_val("save_randomizer_power_cooldowns", {})
+	if random_cds_var is Dictionary:
+		for key in random_cds_var.keys():
+			randomizer_power_cooldowns[int(key)] = float(random_cds_var[key])
+	randomizer_power_damage_mult = SaveManager.get_float("save_randomizer_power_damage_mult", 1.0)
+	randomizer_start_gold = SaveManager.get_int("save_randomizer_start_gold", 50)
+	enemy_hp_mult = SaveManager.get_float("save_enemy_hp_mult", enemy_hp_mult)
+	enemy_dmg_mult = SaveManager.get_float("save_enemy_dmg_mult", enemy_dmg_mult)
+	enemy_speed_mult = SaveManager.get_float("save_enemy_speed_mult", enemy_speed_mult)
+	gold_mult = SaveManager.get_float("save_gold_mult", gold_mult)
+	spawn_rate_mult = SaveManager.get_float("save_spawn_rate_mult", spawn_rate_mult)
+	boss_interval = SaveManager.get_int("save_boss_interval", boss_interval)
+	non_boss_wave_counter = SaveManager.get_int("save_non_boss_wave_counter", 0)
+	is_night_cycle = SaveManager.get_bool("save_is_night_cycle", false)
+	player_damage_level = SaveManager.get_int("save_player_damage_level", 1)
+	player_speed_level = SaveManager.get_int("save_player_speed_level", 1)
+	player_hp_level = SaveManager.get_int("save_player_hp_level", 1)
+	base_hp_level = SaveManager.get_int("save_base_hp_level", 1)
+	repairs_this_run = SaveManager.get_int("save_repairs", 0)
+	bosses_killed_this_run = SaveManager.get_int("save_bosses_killed_this_run", 0)
+	diamonds_this_run = SaveManager.get_int("save_diamonds_this_run", 0)
+	best_combo = SaveManager.get_int("save_best_combo", 0)
+	combo_count = SaveManager.get_int("save_combo_count", 0)
+	combo_timer = SaveManager.get_float("save_combo_timer", 0.0)
+	combo_multiplier = SaveManager.get_float("save_combo_multiplier", 1.0)
+	towers_placed_types = []
+	var saved_tower_types: Variant = SaveManager.get_val("save_towers_placed_types", [])
+	if saved_tower_types is Array:
+		for tower_type in saved_tower_types:
+			towers_placed_types.append(int(tower_type))
+	ability_types_used_run = []
+	var saved_ability_types: Variant = SaveManager.get_val("save_ability_types_used_run", [])
+	if saved_ability_types is Array:
+		for tower_type in saved_ability_types:
+			ability_types_used_run.append(int(tower_type))
+	powers_used_this_run = {}
+	var saved_powers_used: Variant = SaveManager.get_val("save_powers_used_this_run", {})
+	if saved_powers_used is Dictionary:
+		for key in saved_powers_used.keys():
+			powers_used_this_run[int(key)] = bool(saved_powers_used[key])
+	traps_placed_run = SaveManager.get_int("save_traps_placed_run", 0)
+	var saved_towers: Variant = SaveManager.get_val("save_towers", [])
+
+	generate_paths()
+	_generate_terrain_zones()
+	_sync_map_visuals()
+	_spawn_player()
+
+	wave = SaveManager.get_int("save_wave", 0)
+	gold = SaveManager.get_int("save_gold", gold)
+	score = SaveManager.get_int("save_score", 0)
+	total_kills = SaveManager.get_int("save_total_kills", 0)
+	total_gold_earned = SaveManager.get_int("save_total_gold_earned", 0)
+	base_hp = SaveManager.get_float("save_base_hp", base_hp)
+	max_base_hp = SaveManager.get_float("save_max_base_hp", max_base_hp)
+	if is_instance_valid(player_node):
+		player_node.hp = SaveManager.get_float("save_player_hp", player_node.hp)
+		player_node.max_hp = SaveManager.get_float("save_player_max_hp", player_node.max_hp)
+		player_node.attack_damage = SaveManager.get_float("save_player_damage", player_node.attack_damage)
+		player_node.move_speed = SaveManager.get_float("save_player_speed", player_node.move_speed)
+		player_node.attack_range = SaveManager.get_float("save_player_range", player_node.attack_range)
+	_restore_towers_from_save(saved_towers)
+	if towers_placed_types.is_empty():
+		var live_types: Array = []
+		for tower_node in tower_container.get_children():
+			if tower_node.tower_type not in live_types:
+				live_types.append(tower_node.tower_type)
+		towers_placed_types = live_types
+
+	_init_powers()
+	var saved_power_cooldowns: Variant = SaveManager.get_val("save_power_cooldowns", {})
+	if saved_power_cooldowns is Dictionary:
+		for power_type in saved_power_cooldowns.keys():
+			power_cooldowns[int(power_type)] = float(saved_power_cooldowns[power_type])
+	combo_multiplier = maxf(1.0, combo_multiplier)
+	if AchievementManager.has_method("restore_run_progress"):
+		AchievementManager.restore_run_progress(
+			total_kills,
+			bosses_killed_this_run,
+			diamonds_this_run,
+			powers_used_this_run,
+			ability_types_used_run
+		)
+
+	wave_in_progress = false
+	enemies_remaining = 0
+	wave_timer = 4.0
+	current_boss_type = -1
+	show_wave_banner = false
+	game_over = false
+	is_paused = false
+	placement_active = false
+	power_targeting_active = false
+	placement_preview_pos = Vector2(-999, -999)
+	power_target_preview_pos = Vector2(-999, -999)
+	_broadcast_state()
+	_emit_warning(
+		"Run Loaded",
+		"Continue resumed from wave %d." % wave,
+		Color(0.72, 0.90, 1.0),
+		1,
+		2.4
+	)
+	return true
 
 func _on_combo_expire() -> void:
 	var bonus: int = combo_count * 2
@@ -1405,6 +2528,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_placement_preview(event.position)
 		elif event is InputEventScreenDrag:
 			_update_placement_preview(event.position)
+	elif power_targeting_active:
+		if event is InputEventMouseMotion:
+			power_target_preview_pos = _snap_to_grid(event.position)
+		elif event is InputEventScreenDrag:
+			power_target_preview_pos = _snap_to_grid(event.position)
+	elif event is InputEventScreenDrag:
+		move_player_to(event.position)
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		move_player_to(event.position)
+
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		if placement_active:
+			cancel_placement()
+			return
+		if power_targeting_active:
+			cancel_power_targeting()
+			return
+
 	if event is InputEventScreenTouch or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		var pressed: bool = event.pressed if event is InputEventMouseButton else event.pressed
 		if pressed:
@@ -1412,6 +2553,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			if placement_active:
 				_update_placement_preview(pos)
 				try_place_tower(pos)
+			elif power_targeting_active:
+				power_target_preview_pos = _snap_to_grid(pos)
+				if use_power(power_targeting_type, power_target_preview_pos):
+					cancel_power_targeting()
+			else:
+				if not _check_tower_tap(pos):
+					tower_selected.emit(null)
+					move_player_to(pos)
 
 # ─── Speed control ────────────────────────────────────────────────────────────
 
@@ -1422,6 +2571,8 @@ func toggle_pause() -> void:
 	is_paused = !is_paused
 	if pause_menu:
 		pause_menu.visible = is_paused
+	if is_paused and not game_over and wave > 0:
+		save_game()
 
 func _trigger_ability_flash(color: Color) -> void:
 	ability_flash_color = color
@@ -1441,35 +2592,50 @@ func _draw() -> void:
 		draw_rect(Rect2(0, 0, screen_w, screen_h), base_flash_color)
 
 	# Placement preview
-	if not placement_active or placement_preview_pos.x < 0:
-		return
-	var accent := _get_tower_accent_color(placement_tower_type)
-	var pulse := sin(placement_preview_anim * 3.0) * 0.08
-	if placement_preview_valid:
-		draw_circle(placement_preview_pos, placement_preview_range, accent * Color(1, 1, 1, 0.06 + pulse))
-		for i in range(48):
-			if i % 3 == 0:
-				continue
-			var a1: float = TAU * i / 48
-			var a2: float = TAU * (i + 1) / 48
-			draw_line(
-				Vector2(cos(a1), sin(a1)) * placement_preview_range + placement_preview_pos,
-				Vector2(cos(a2), sin(a2)) * placement_preview_range + placement_preview_pos,
-				accent * Color(1, 1, 1, 0.3), 1.5)
-		draw_circle(placement_preview_pos, 14.0, accent * Color(1, 1, 1, 0.15))
-		draw_circle(placement_preview_pos, 10.0, accent * Color(1, 1, 1, 0.1))
-	else:
-		draw_circle(placement_preview_pos, placement_preview_range, Color(1, 0.1, 0.1, 0.04))
-		for i in range(48):
-			if i % 3 == 0:
-				continue
-			var a1: float = TAU * i / 48
-			var a2: float = TAU * (i + 1) / 48
-			draw_line(
-				Vector2(cos(a1), sin(a1)) * placement_preview_range + placement_preview_pos,
-				Vector2(cos(a2), sin(a2)) * placement_preview_range + placement_preview_pos,
-				Color(1, 0.2, 0.2, 0.2), 1.5)
-	queue_redraw()
+	if placement_active and placement_preview_pos.x >= 0:
+		var accent := _get_tower_accent_color(placement_tower_type)
+		var pulse := sin(placement_preview_anim * 3.0) * 0.08
+		if placement_preview_valid:
+			draw_circle(placement_preview_pos, placement_preview_range, accent * Color(1, 1, 1, 0.06 + pulse))
+			for i in range(48):
+				if i % 3 == 0:
+					continue
+				var a1: float = TAU * i / 48
+				var a2: float = TAU * (i + 1) / 48
+				draw_line(
+					Vector2(cos(a1), sin(a1)) * placement_preview_range + placement_preview_pos,
+					Vector2(cos(a2), sin(a2)) * placement_preview_range + placement_preview_pos,
+					accent * Color(1, 1, 1, 0.3), 1.5)
+			draw_circle(placement_preview_pos, 14.0, accent * Color(1, 1, 1, 0.15))
+			draw_circle(placement_preview_pos, 10.0, accent * Color(1, 1, 1, 0.10))
+			_draw_tower_ghost(placement_preview_pos, accent, true)
+		else:
+			draw_circle(placement_preview_pos, placement_preview_range, Color(1, 0.1, 0.1, 0.04))
+			for i in range(48):
+				if i % 3 == 0:
+					continue
+				var a1: float = TAU * i / 48
+				var a2: float = TAU * (i + 1) / 48
+				draw_line(
+					Vector2(cos(a1), sin(a1)) * placement_preview_range + placement_preview_pos,
+					Vector2(cos(a2), sin(a2)) * placement_preview_range + placement_preview_pos,
+					Color(1, 0.2, 0.2, 0.2), 1.5)
+			_draw_tower_ghost(placement_preview_pos, Color(1.0, 0.34, 0.24), false)
+
+	# Power targeting preview
+	if power_targeting_active and power_target_preview_pos.x >= 0:
+		var power_col := _get_power_accent_color(power_targeting_type)
+		var pulse := 0.08 + 0.06 * (0.5 + 0.5 * sin(placement_preview_anim * 4.0))
+		var inner_r := 18.0
+		var outer_r := 42.0
+		draw_circle(power_target_preview_pos, outer_r, power_col * Color(1, 1, 1, pulse * 0.35))
+		draw_arc(power_target_preview_pos, outer_r, 0.0, TAU, 36, power_col * Color(1, 1, 1, 0.54), 1.8)
+		draw_arc(power_target_preview_pos, inner_r, 0.0, TAU, 24, power_col * Color(1, 1, 1, 0.78), 1.6)
+		draw_line(power_target_preview_pos + Vector2(-10, 0), power_target_preview_pos + Vector2(10, 0), power_col.lightened(0.35), 1.4)
+		draw_line(power_target_preview_pos + Vector2(0, -10), power_target_preview_pos + Vector2(0, 10), power_col.lightened(0.35), 1.4)
+
+	if placement_active or power_targeting_active:
+		queue_redraw()
 
 func _get_tower_accent_color(ttype: int) -> Color:
 	match ttype:
@@ -1486,14 +2652,39 @@ func _get_tower_accent_color(ttype: int) -> Color:
 		GameData.TowerType.HEALER:   return Color(0.3, 1.0, 0.5)
 		_:                           return Color(0.9, 0.8, 0.3)
 
-func _check_tower_tap(pos: Vector2) -> void:
+func _get_power_accent_color(power_type: int) -> Color:
+	match power_type:
+		GameData.PowerType.FIREBALL: return Color(1.0, 0.46, 0.20)
+		GameData.PowerType.FREEZE: return Color(0.62, 0.90, 1.0)
+		GameData.PowerType.HEAL: return Color(0.38, 0.96, 0.56)
+		GameData.PowerType.LIGHTNING: return Color(1.0, 0.90, 0.34)
+		_: return Color(0.86, 0.90, 1.0)
+
+func _draw_tower_ghost(pos: Vector2, accent: Color, valid: bool) -> void:
+	var body := accent if valid else Color(1.0, 0.34, 0.24)
+	var outline := body * Color(1, 1, 1, 0.66 if valid else 0.46)
+	draw_circle(pos, 12.0, body * Color(1, 1, 1, 0.12))
+	draw_circle(pos, 8.0, outline * Color(1, 1, 1, 0.36))
+	var core := PackedVector2Array([
+		Vector2(pos.x, pos.y - 19),
+		Vector2(pos.x - 6.5, pos.y - 7.5),
+		Vector2(pos.x - 4.0, pos.y + 4.0),
+		Vector2(pos.x + 4.0, pos.y + 4.0),
+		Vector2(pos.x + 6.5, pos.y - 7.5),
+	])
+	draw_colored_polygon(core, outline * Color(1, 1, 1, 0.85))
+	draw_polyline(core, outline.darkened(0.25), 1.2, true)
+	draw_line(pos + Vector2(0, -3), pos + Vector2(0, -16), outline.lightened(0.12), 1.6)
+
+func _check_tower_tap(pos: Vector2) -> bool:
 	for t in tower_container.get_children():
 		if pos.distance_to(t.position) < 30:
 			tower_selected.emit(t)
-			return
+			return true
+	return false
 
 func _check_placement_valid(pos: Vector2) -> bool:
-	if pos.distance_to(base_position) < 60:
+	if _is_too_close_to_any_base(pos, 60.0):
 		return false
 	for t in tower_container.get_children():
 		if pos.distance_to(t.position) < 70:

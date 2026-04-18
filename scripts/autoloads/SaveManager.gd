@@ -31,6 +31,9 @@ func get_bool(key: String, default_val: bool = false) -> bool:
 func get_string(key: String, default_val: String = "") -> String:
 	return str(_cfg.get_value("game", key, default_val))
 
+func get_val(key: String, default_val: Variant = null) -> Variant:
+	return _cfg.get_value("game", key, default_val)
+
 func set_val(key: String, value: Variant) -> void:
 	_cfg.set_value("game", key, value)
 	_dirty = true
@@ -130,6 +133,18 @@ func submit_endless(wave: int) -> bool:
 		return true
 	return false
 
+func get_boss_rush_record() -> int:
+	return int(_cfg.get_value("scores", "boss_rush_high", 0))
+
+func submit_boss_rush(wave: int) -> bool:
+	var prev := get_boss_rush_record()
+	if wave > prev:
+		_cfg.set_value("scores", "boss_rush_high", wave)
+		_dirty = true
+		flush()
+		return true
+	return false
+
 # Stats accumulation
 func add_stat(key: String, amount: int) -> void:
 	var v := int(_cfg.get_value("stats", key, 0))
@@ -138,6 +153,12 @@ func add_stat(key: String, amount: int) -> void:
 
 func get_stat(key: String) -> int:
 	return int(_cfg.get_value("stats", key, 0))
+
+func set_stat_max(key: String, value: int) -> void:
+	var current := int(_cfg.get_value("stats", key, 0))
+	if value > current:
+		_cfg.set_value("stats", key, value)
+		_dirty = true
 
 # ─── Campaign ─────────────────────────────────────────────────────────────────
 
@@ -203,3 +224,22 @@ func get_upgrade_level(upg_id: String) -> int:
 func set_upgrade_level(upg_id: String, level: int) -> void:
 	_cfg.set_value("upgrades", upg_id, level)
 	_dirty = true
+
+func reset_progress() -> void:
+	var keep_music := get_float("music_volume_db", -12.0)
+	var keep_sfx := get_float("sfx_volume_db", -8.0)
+	var keep_master := get_float("master_volume_db", 0.0)
+	var keep_show_fps := get_bool("show_fps", false)
+	var keep_screen_shake := get_bool("screen_shake", true)
+	var keep_palette := get_string("ui_palette", GameData.current_palette)
+
+	_cfg = ConfigFile.new()
+	_cfg.set_value("meta", "version", SCHEMA_VERSION)
+	_cfg.set_value("game", "music_volume_db", keep_music)
+	_cfg.set_value("game", "sfx_volume_db", keep_sfx)
+	_cfg.set_value("game", "master_volume_db", keep_master)
+	_cfg.set_value("game", "show_fps", keep_show_fps)
+	_cfg.set_value("game", "screen_shake", keep_screen_shake)
+	_cfg.set_value("game", "ui_palette", keep_palette)
+	_dirty = true
+	flush()

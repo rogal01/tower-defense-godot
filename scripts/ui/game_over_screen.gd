@@ -8,6 +8,7 @@ var _lbl_score: Label
 var _lbl_wave: Label
 var _lbl_high: Label
 var _lbl_progress: Label
+var _lbl_stats: Label
 var _btn_next: Button
 
 func _ready() -> void:
@@ -21,50 +22,76 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var dimmer := ColorRect.new()
 	dimmer.size = Vector2(480, 854)
-	dimmer.color = Color(0, 0, 0, 0.56)
+	dimmer.color = Color(0.01, 0.02, 0.04, 0.82)
 	add_child(dimmer)
 
 	var panel := Panel.new()
-	panel.position = Vector2(30, 162)
-	panel.size = Vector2(420, 496)
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.03, 0.04, 0.12, 0.97)))
+	panel.position = Vector2(24, 136)
+	panel.size = Vector2(432, 548)
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.03, 0.06, 0.10, 0.99), Color(0.42, 0.66, 0.88, 0.26), 30))
 	add_child(panel)
 
-	_lbl_title = _label(panel, "GAME OVER", Vector2(20, 18), 30, Color(1.0, 0.3, 0.3))
+	var top_glow := ColorRect.new()
+	top_glow.position = Vector2(16, 14)
+	top_glow.size = Vector2(400, 72)
+	top_glow.color = Color(0.28, 0.62, 0.92, 0.10)
+	panel.add_child(top_glow)
+
+	var top_band := ColorRect.new()
+	top_band.position = Vector2(0, 0)
+	top_band.size = Vector2(432, 90)
+	top_band.color = Color(0.06, 0.10, 0.18, 0.58)
+	panel.add_child(top_band)
+
+	var cap := Panel.new()
+	cap.position = Vector2(24, 18)
+	cap.size = Vector2(118, 24)
+	cap.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.16, 0.24, 0.94), Color(0.54, 0.82, 0.96, 0.22), 12))
+	panel.add_child(cap)
+	var cap_label := _label(cap, "RUN REPORT", Vector2(0, 4), 10, Color(0.80, 0.92, 1.0))
+	cap_label.custom_minimum_size = Vector2(118, 16)
+	cap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	_lbl_title = _label(panel, "RUN ENDED", Vector2(0, 38), 32, Color(1.0, 0.40, 0.34))
+	_lbl_title.custom_minimum_size = Vector2(432, 34)
 	_lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lbl_title.custom_minimum_size = Vector2(380, 46)
 
-	_lbl_wave = _label(panel, "Wave 0", Vector2(20, 78), 22, Color(0.7, 0.85, 1.0))
+	_lbl_wave = _label(panel, "Wave 0", Vector2(26, 112), 22, Color(0.78, 0.90, 1.0))
+	_lbl_wave.custom_minimum_size = Vector2(380, 28)
 	_lbl_wave.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lbl_wave.custom_minimum_size = Vector2(380, 32)
 
-	_lbl_score = _label(panel, "Score 0", Vector2(20, 118), 26, Color(1.0, 0.85, 0.2))
+	_lbl_score = _label(panel, "Score 0", Vector2(26, 154), 30, Color(1.0, 0.86, 0.28))
+	_lbl_score.custom_minimum_size = Vector2(380, 34)
 	_lbl_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lbl_score.custom_minimum_size = Vector2(380, 36)
 
-	_lbl_high = _label(panel, "", Vector2(20, 166), 16, Color(0.75, 0.95, 0.8))
+	var score_band := ColorRect.new()
+	score_band.position = Vector2(36, 206)
+	score_band.size = Vector2(360, 34)
+	score_band.color = Color(0.08, 0.12, 0.18, 0.46)
+	panel.add_child(score_band)
+
+	_lbl_high = _label(panel, "", Vector2(26, 214), 16, Color(0.78, 0.94, 0.82))
+	_lbl_high.custom_minimum_size = Vector2(380, 20)
 	_lbl_high.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lbl_high.custom_minimum_size = Vector2(380, 26)
 
-	var stats := _label(panel, "", Vector2(20, 208), 14, Color(0.62, 0.7, 0.84))
-	stats.name = "Stats"
-	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats.custom_minimum_size = Vector2(380, 54)
-	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lbl_stats = _label(panel, "", Vector2(34, 262), 14, Color(0.68, 0.78, 0.90))
+	_lbl_stats.custom_minimum_size = Vector2(356, 54)
+	_lbl_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lbl_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	_lbl_progress = _label(panel, "", Vector2(20, 268), 14, Color(0.86, 0.9, 1.0))
+	_lbl_progress = _label(panel, "", Vector2(34, 326), 14, Color(0.86, 0.92, 1.0))
+	_lbl_progress.custom_minimum_size = Vector2(356, 46)
 	_lbl_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lbl_progress.custom_minimum_size = Vector2(380, 38)
 	_lbl_progress.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	var btn_restart := _button(panel, "PLAY AGAIN", Vector2(30, 320), Vector2(360, 52), 22, Color(0.04, 0.26, 0.08))
+	var btn_restart := _button(panel, "PLAY AGAIN", Vector2(40, 390), Vector2(352, 52), 22, Color(0.10, 0.22, 0.18))
 	btn_restart.pressed.connect(_on_restart)
 
-	_btn_next = _button(panel, "NEXT LEVEL", Vector2(30, 384), Vector2(360, 42), 18, Color(0.20, 0.16, 0.04))
+	_btn_next = _button(panel, "NEXT LEVEL", Vector2(40, 454), Vector2(352, 42), 18, Color(0.18, 0.14, 0.06))
 	_btn_next.visible = false
 	_btn_next.pressed.connect(_on_next_level)
 
-	var btn_menu := _button(panel, "MAIN MENU", Vector2(30, 436), Vector2(360, 42), 18, Color(0.06, 0.08, 0.18))
+	var btn_menu := _button(panel, "MAIN MENU", Vector2(40, 506), Vector2(352, 42), 18, Color(0.08, 0.12, 0.20))
 	btn_menu.pressed.connect(_on_menu)
 
 func _show_game_over(score: int, wave: int, is_high_score: bool) -> void:
@@ -72,58 +99,86 @@ func _show_game_over(score: int, wave: int, is_high_score: bool) -> void:
 	_next_level_id = -1
 	_btn_next.visible = false
 
-	var endless_mode := gm and bool(gm.get("is_endless"))
-	var difficulty_name := "Normal"
+	var mode_line := "Reached Wave %d" % wave
+	var diff_name := "Normal"
 	if gm:
 		match int(gm.get("difficulty")):
 			0:
-				difficulty_name = "Easy"
-			1:
-				difficulty_name = "Normal"
+				diff_name = "Easy"
 			2:
-				difficulty_name = "Hard"
+				diff_name = "Hard"
+		if bool(gm.get("is_boss_gauntlet")):
+			mode_line = "Boss Gauntlet  |  Wave %d" % wave
+		elif bool(gm.get("is_boss_rush")):
+			mode_line = "Boss Rush  |  Wave %d" % wave
+		elif bool(gm.get("is_daily_challenge")):
+			mode_line = "Daily Challenge  |  Wave %d" % wave
+		elif bool(gm.get("is_randomizer_mode")):
+			mode_line = "Randomizer  |  Wave %d" % wave
+		elif bool(gm.get("is_endless")):
+			mode_line = "Endless %s  |  Wave %d" % [diff_name, wave]
 
-	_lbl_title.text = "GAME OVER"
-	_lbl_title.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-	_lbl_score.text = "Score: %d" % score
-	if endless_mode:
-		_lbl_wave.text = "Endless %s - Wave %d" % [difficulty_name, wave]
-		_lbl_high.text = "Endless Record: %d" % SaveManager.get_endless_record()
+	_lbl_title.text = "RUN ENDED"
+	_lbl_title.add_theme_color_override("font_color", Color(1.0, 0.40, 0.34))
+	_lbl_wave.text = mode_line
+	_lbl_score.text = "Score %d" % score
+	if gm and bool(gm.get("is_endless")):
+		_lbl_high.text = "Endless Record %d" % SaveManager.get_endless_record()
+	elif is_high_score:
+		_lbl_high.text = "New High Score"
 	else:
-		_lbl_wave.text = "Reached Wave %d" % wave
-		_lbl_high.text = "NEW HIGH SCORE!" if is_high_score else "High Score: %d" % SaveManager.get_high_score()
+		_lbl_high.text = "High Score %d" % SaveManager.get_high_score()
 
-	var stats: Label = find_child("Stats")
-	if stats:
-		stats.text = "Best Wave: %d   Endless Record: %d" % [
-			SaveManager.get_high_wave(),
-			SaveManager.get_endless_record()
-		]
-	_lbl_progress.text = "Lifetime clears: %d" % SaveManager.get_stat("lifetime_games")
+	var run_diamonds := int(gm.get("diamonds_this_run")) if gm else 0
+	_lbl_stats.text = "Best Wave %d  |  Endless %d  |  Difficulty %s\nRun diamonds +%d" % [
+		SaveManager.get_high_wave(),
+		SaveManager.get_endless_record(),
+		diff_name,
+		run_diamonds,
+	]
+	_lbl_progress.text = "Lifetime clears %d  |  Total score %d" % [
+		SaveManager.get_stat("lifetime_games"),
+		SaveManager.get_stat("lifetime_score"),
+	]
 
 func _show_victory(stars: int, score: int, level_id: int) -> void:
 	visible = true
 	var level_data := CampaignData.get_level(level_id)
 
 	_lbl_title.text = "VICTORY"
-	_lbl_title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.28))
-	_lbl_wave.text = "Level %d: %s" % [level_id, level_data.get("title", "Campaign")]
-	_lbl_score.text = "Score: %d" % score
-	_lbl_high.text = "Stars: %s" % (("*").repeat(stars) + ("-").repeat(3 - stars))
+	_lbl_title.add_theme_color_override("font_color", Color(1.0, 0.90, 0.30))
+	_lbl_wave.text = "Stage %02d  |  %s" % [level_id, level_data.get("title", "Campaign")]
+	_lbl_score.text = "Score %d" % score
+	_lbl_high.text = "Stars %s" % (("*").repeat(stars) + ("-").repeat(3 - stars))
+	var constraints: Array[String] = []
+	if bool(level_data.get("fog", false)):
+		constraints.append("FOG")
+	if bool(level_data.get("double_base", false)):
+		constraints.append("DUAL BASE")
+	if bool(level_data.get("branching", false)):
+		constraints.append("BRANCHING")
+	if int(level_data.get("mini_boss_interval", 0)) > 0:
+		constraints.append("MINI BOSS")
+	if not bool(level_data.get("upgrades", true)):
+		constraints.append("NO UPGRADES")
+	var constraints_text := "Standard rules" if constraints.is_empty() else ", ".join(constraints)
+	var reward_diamonds := int(level_data.get("diamonds", 0))
+	var run_bonus_diamonds := int(gm.get("diamonds_this_run")) if gm else 0
+	var total_diamonds := reward_diamonds + run_bonus_diamonds
 
-	var stats: Label = find_child("Stats")
-	if stats:
-		stats.text = "+%d diamonds earned   Target wave %d" % [
-			level_data.get("diamonds", 0),
-			level_data.get("target_wave", 0)
-		]
-
-	_lbl_progress.text = "Campaign Progress: %d/40 cleared, %d three-star clears" % [
+	_lbl_stats.text = "+%d diamonds earned  |  Target wave %d\n%s" % [
+		total_diamonds,
+		level_data.get("target_wave", 0),
+		constraints_text,
+	]
+	var total_levels := maxi(1, CampaignData.get_total_levels())
+	_lbl_progress.text = "Campaign %d / %d cleared  |  Three-star clears %d" % [
 		CampaignData.get_beaten_count(),
-		CampaignData.get_three_star_count()
+		total_levels,
+		CampaignData.get_three_star_count(),
 	]
 
-	_next_level_id = level_id + 1 if level_id < 40 else -1
+	_next_level_id = level_id + 1 if level_id < total_levels else -1
 	_btn_next.visible = _next_level_id > 0
 
 func _on_restart() -> void:
@@ -163,42 +218,39 @@ func _button(parent: Control, text: String, pos: Vector2, size: Vector2, font_si
 	button.position = pos
 	button.size = size
 	button.add_theme_font_size_override("font_size", font_size)
-	button.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0))
-	button.add_theme_stylebox_override("normal", _button_style(color))
-	var hover := _button_style(color.lightened(0.14))
-	hover.border_color = Color(0.55, 0.68, 0.95, 0.42)
-	button.add_theme_stylebox_override("hover", hover)
-	var pressed := _button_style(color.darkened(0.18))
-	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_color_override("font_color", Color(0.90, 0.95, 1.0))
+	button.add_theme_stylebox_override("normal", _button_style(color, 18))
+	button.add_theme_stylebox_override("hover", _button_style(color.lightened(0.10), 18, Color(0.72, 0.86, 0.98, 0.38), 2))
+	button.add_theme_stylebox_override("pressed", _button_style(color.darkened(0.12), 18))
 	parent.add_child(button)
 	return button
 
-func _panel_style(color: Color) -> StyleBoxFlat:
+func _panel_style(color: Color, border: Color, radius: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_left = 6
-	style.corner_radius_bottom_right = 6
-	style.border_width_left = 1
-	style.border_width_right = 1
-	style.border_width_top = 2
-	style.border_width_bottom = 1
-	style.border_color = Color(0.36, 0.42, 0.7, 0.3)
-	style.shadow_color = Color(0, 0, 0, 0.48)
-	style.shadow_size = 8
-	return style
-
-func _button_style(color: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
 	style.border_width_left = 1
 	style.border_width_right = 1
 	style.border_width_top = 1
 	style.border_width_bottom = 1
-	style.border_color = Color(0.3, 0.4, 0.6, 0.26)
+	style.border_color = border
+	style.shadow_color = Color(0, 0, 0, 0.44)
+	style.shadow_size = 12
+	return style
+
+func _button_style(color: Color, radius: int, border: Color = Color(0.42, 0.58, 0.76, 0.22), border_width: int = 1) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.border_width_left = border_width
+	style.border_width_right = border_width
+	style.border_width_top = border_width
+	style.border_width_bottom = border_width
+	style.border_color = border
 	return style

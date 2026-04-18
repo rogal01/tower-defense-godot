@@ -1,7 +1,11 @@
-# GameData.gd — Autoload singleton: all static game data
+# GameData.gd — Global Content Registry
+# This singleton serves as the "Source of Truth" for game constants, providing 
+# 1:1 parity with the canonical Kotlin/Android implementation.
+# Data-driven design allows for easy balancing and cross-engine synchronization.
 extends Node
 
-# ─── Enums ───────────────────────────────────────────────────────────────────
+# ─── System Enums ────────────────────────────────────────────────────────────
+# Strict mappings aligned with the Kotlin master specification.
 
 enum EnemyType {
 	GOBLIN, SKELETON, ORC, DEMON, DRAGON,
@@ -12,11 +16,11 @@ enum EnemyType {
 }
 
 enum DamageType {
-	PHYSICAL, MAGIC, EXPLOSIVE, POISON, ELECTRIC, ICE, FIRE, DARK
+	PHYSICAL, MAGIC, EXPLOSIVE, POISON, ELECTRIC, ICE
 }
 
 enum TowerType {
-	ARROW, MAGIC, CANNON, POISON, TESLA, ICE, FLAME, NECRO, BALLISTA, VORTEX, HEALER
+	ARROW, MAGIC, CANNON, POISON, TESLA, ICE
 }
 
 enum BossType {
@@ -29,8 +33,7 @@ enum BossAbility {
 }
 
 enum WaveModifier {
-	NONE, FAST, ARMORED, REGEN, SWARM, RICH, INVISIBLE, SHIELDED,
-	BOSS_RALLY, BERSERKER, SPLIT, ELITE
+	NONE, FAST, ARMORED, REGEN, SWARM, RICH, INVISIBLE, BOSS_RALLY
 }
 
 enum PowerType {
@@ -38,7 +41,7 @@ enum PowerType {
 }
 
 enum MapType {
-	CLASSIC, VALLEY, CROSSROADS, DESERT, SNOW, LAVA, ENCHANTED, VOLCANO
+	CLASSIC, VALLEY, CROSSROADS, DESERT, SNOW
 }
 
 enum TargetMode {
@@ -55,11 +58,6 @@ var TOWERS: Dictionary = {
 	TowerType.POISON:   {cost=80,  dmg=6.0,  range=210.0, rate=1.0, dtype=DamageType.POISON,   cd=28.0, ability="Plague",       emoji="☠️", desc="DoT poison damage"},
 	TowerType.TESLA:    {cost=120, dmg=20.0, range=250.0, rate=0.7, dtype=DamageType.ELECTRIC, cd=32.0, ability="Overcharge",   emoji="⚡", desc="Chains to nearby enemies"},
 	TowerType.ICE:      {cost=70,  dmg=0.0,  range=230.0, rate=0.0, dtype=DamageType.ICE,      cd=25.0, ability="Deep Freeze",  emoji="❄️", desc="Slows all enemies in range"},
-	TowerType.FLAME:    {cost=90,  dmg=12.0, range=190.0, rate=0.9, dtype=DamageType.FIRE,     cd=30.0, ability="Inferno",      emoji="🔥", desc="Burns enemies over time"},
-	TowerType.NECRO:    {cost=110, dmg=18.0, range=200.0, rate=0.6, dtype=DamageType.DARK,     cd=35.0, ability="Soul Harvest", emoji="💀", desc="Dark damage, heals on kill"},
-	TowerType.BALLISTA: {cost=140, dmg=50.0, range=300.0, rate=0.3, dtype=DamageType.PHYSICAL, cd=40.0, ability="Siege Shot",   emoji="🎯", desc="Extreme range sniper"},
-	TowerType.VORTEX:   {cost=100, dmg=4.0,  range=240.0, rate=1.5, dtype=DamageType.MAGIC,    cd=28.0, ability="Singularity",  emoji="🌀", desc="Pulls and damages enemies"},
-	TowerType.HEALER:   {cost=80,  dmg=0.0,  range=220.0, rate=0.2, dtype=DamageType.MAGIC,    cd=20.0, ability="Mass Heal",    emoji="💚", desc="Repairs the base HP"},
 }
 
 # ─── Enemy Base Stats ─────────────────────────────────────────────────────────
@@ -137,32 +135,29 @@ var MAPS: Dictionary = {
 	MapType.CROSSROADS: {name="Crossroads", emoji="🛤️", bg_color=Color(0.10, 0.18, 0.10), path_color=Color(0.50, 0.40, 0.20)},
 	MapType.DESERT:     {name="Desert",     emoji="🏜️", bg_color=Color(0.30, 0.25, 0.10), path_color=Color(0.70, 0.58, 0.30)},
 	MapType.SNOW:       {name="Snow",       emoji="❄️", bg_color=Color(0.70, 0.75, 0.80), path_color=Color(0.60, 0.60, 0.65)},
-	MapType.LAVA:       {name="Lava",       emoji="🌋", bg_color=Color(0.20, 0.08, 0.04), path_color=Color(0.60, 0.15, 0.05)},
-	MapType.ENCHANTED:  {name="Enchanted",  emoji="🔮", bg_color=Color(0.10, 0.05, 0.20), path_color=Color(0.35, 0.20, 0.45)},
-	MapType.VOLCANO:    {name="Volcano",    emoji="🌋", bg_color=Color(0.18, 0.05, 0.02), path_color=Color(0.55, 0.12, 0.04)},
 }
 
 # ─── Skill Tree ───────────────────────────────────────────────────────────────
 # max_level, cost_per_level (diamonds), description, effect_per_level
 
 var SKILLS: Dictionary = {
-	"start_gold":    {max=5,  cost=2, label="Start Gold",      desc="+25g starting gold per level"},
-	"base_hp":       {max=5,  cost=3, label="Base HP",         desc="+20 base HP per level"},
-	"player_damage": {max=5,  cost=2, label="Hero Damage",     desc="+5 hero attack per level"},
-	"player_speed":  {max=5,  cost=2, label="Hero Speed",      desc="+20 hero speed per level"},
-	"player_hp":     {max=5,  cost=3, label="Hero HP",         desc="+25 hero HP per level"},
-	"tower_damage":  {max=5,  cost=4, label="Tower Damage",    desc="+8% tower damage per level"},
-	"gold_bonus":    {max=5,  cost=3, label="Gold Bonus",      desc="+10% gold income per level"},
-	"diamond_luck":  {max=3,  cost=5, label="Diamond Luck",    desc="+2% diamond drop chance per level"},
-	"wave_bonus":    {max=5,  cost=3, label="Wave Bonus",      desc="+15 wave completion gold per level"},
-	"attack_range":  {max=3,  cost=4, label="Hero Range",      desc="+30 hero attack range per level"},
+	"start_gold":    {max=5, base_cost=3, step_cost=2, label="Golden Start",      desc="+15 starting gold per level"},
+	"base_hp":       {max=5, base_cost=4, step_cost=3, label="Fortified Base",   desc="+20 base HP per level"},
+	"player_damage": {max=5, base_cost=5, step_cost=3, label="Sharp Blade",      desc="+3 starting attack damage"},
+	"player_speed":  {max=5, base_cost=3, step_cost=2, label="Swift Feet",       desc="+20 starting move speed"},
+	"player_hp":     {max=5, base_cost=4, step_cost=3, label="Tough Skin",       desc="+15 starting player HP"},
+	"tower_damage":  {max=5, base_cost=6, step_cost=4, label="Tower Mastery",    desc="+8% tower damage per level"},
+	"gold_bonus":    {max=5, base_cost=5, step_cost=3, label="Treasure Hunter",  desc="+10% gold from kills per level"},
+	"diamond_luck":  {max=3, base_cost=8, step_cost=6, label="Diamond Magnet",   desc="+5% diamond drop chance per level"},
+	"wave_bonus":    {max=5, base_cost=4, step_cost=3, label="War Veteran",      desc="+3 gold per wave bonus"},
+	"attack_range":  {max=4, base_cost=5, step_cost=4, label="Eagle Eye",        desc="+15 starting attack range per level"},
 	# Prestige
-	"ice_power":     {max=3,  cost=6, label="Ice Power",       desc="+15% ice slow effect per level"},
-	"ability_cd":    {max=5,  cost=5, label="Ability CD",      desc="-5% tower ability cooldown per level"},
-	"sell_bonus":    {max=3,  cost=4, label="Sell Bonus",      desc="+10% tower sell value per level"},
-	"resist_pierce": {max=3,  cost=7, label="Resist Pierce",   desc="-10% enemy resistance per level"},
-	"wave_modifier": {max=3,  cost=6, label="Wave Modifier",   desc="+1 modifier chance per level"},
-	"prestige_gold": {max=3,  cost=5, label="Prestige Gold",   desc="+50g starting gold in prestige"},
+	"ice_power":     {max=5, base_cost=6, step_cost=4, label="Frost Mastery",    desc="+10% ice tower slow per level"},
+	"ability_cd":    {max=5, base_cost=5, step_cost=3, label="Quick Cast",       desc="-5% ability cooldown per level"},
+	"sell_bonus":    {max=5, base_cost=4, step_cost=2, label="Haggler",          desc="+10% tower sell value per level"},
+	"resist_pierce": {max=5, base_cost=7, step_cost=5, label="Armor Break",      desc="+5% resistance pierce per level"},
+	"wave_modifier": {max=3, base_cost=8, step_cost=6, label="Lucky Waves",      desc="Better wave modifier chances"},
+	"prestige_gold": {max=5, base_cost=5, step_cost=4, label="Midas Touch",      desc="+5% gold per prestige level"},
 }
 
 # ─── Wave Modifier Descriptions ───────────────────────────────────────────────
@@ -175,11 +170,7 @@ var MODIFIER_NAMES: Dictionary = {
 	WaveModifier.SWARM:      {name="Swarm",       emoji="🐝", color=Color(0.9, 0.7, 0.1)},
 	WaveModifier.RICH:       {name="Rich",        emoji="💰", color=Color(1.0, 0.85, 0.0)},
 	WaveModifier.INVISIBLE:  {name="Invisible",   emoji="👁️", color=Color(0.5, 0.5, 0.7)},
-	WaveModifier.SHIELDED:   {name="Shielded",    emoji="🔵", color=Color(0.3, 0.6, 1.0)},
 	WaveModifier.BOSS_RALLY: {name="Boss Rally",  emoji="👑", color=Color(0.9, 0.3, 0.1)},
-	WaveModifier.BERSERKER:  {name="Berserker",   emoji="🦾", color=Color(0.9, 0.2, 0.2)},
-	WaveModifier.SPLIT:      {name="Split",       emoji="✂️", color=Color(0.8, 0.5, 0.9)},
-	WaveModifier.ELITE:      {name="Elite",       emoji="⭐", color=Color(1.0, 0.9, 0.0)},
 }
 
 # ─── Helper Functions ─────────────────────────────────────────────────────────
