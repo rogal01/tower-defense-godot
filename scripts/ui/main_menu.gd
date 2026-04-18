@@ -32,6 +32,7 @@ var _overlay: Control = null
 var _anim_time: float = 0.0
 var _stars: Array = []
 var _selected_endless_difficulty: int = 1
+var _selected_campaign_map: int = GameData.MapType.CLASSIC
 var _selected_endless_map: int = GameData.MapType.CLASSIC
 var _selected_extra_mode: String = "boss_gauntlet"
 var _selected_extra_map: int = GameData.MapType.CLASSIC
@@ -131,11 +132,11 @@ func _build_hero_panel() -> void:
 
 	var badge := _panel(Vector2(18, 16), Vector2(124, 28), Color(0.08, 0.16, 0.24, 0.92), Color(0.56, 0.84, 0.98, 0.26), 14)
 	panel.add_child(badge)
-	var badge_text := _label(badge, "AETHER FRONT", Vector2(0, 5), 11, Color(0.82, 0.94, 1.0))
+	var badge_text := _label(badge, "KOTLIN CANON", Vector2(0, 5), 11, Color(0.82, 0.94, 1.0))
 	badge_text.custom_minimum_size = Vector2(124, 18)
 	badge_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	var eyebrow := _label(panel, "TACTICAL DEFENSE", Vector2(18, 56), 13, Color(0.96, 0.84, 0.42))
+	var eyebrow := _label(panel, "CANONICAL PORT", Vector2(18, 56), 13, Color(0.96, 0.84, 0.42))
 	eyebrow.custom_minimum_size = Vector2(210, 18)
 
 	var title_shadow := _label(panel, "TOWER DEFENSE", Vector2(18, 70), 38, Color(0, 0, 0, 0.38))
@@ -144,7 +145,7 @@ func _build_hero_panel() -> void:
 	var title := _label(panel, "TOWER DEFENSE", Vector2(18, 68), 38, Color(0.92, 0.98, 1.0))
 	title.custom_minimum_size = Vector2(286, 44)
 
-	var subtitle := _label(panel, "Push through campaign routes, tune your endless run, and keep the battlefield readable under pressure.", Vector2(18, 116), 13, Color(0.70, 0.84, 0.95))
+	var subtitle := _label(panel, "Match the Kotlin campaign, powers, and progression with a cleaner cross-engine port.", Vector2(18, 116), 13, Color(0.70, 0.84, 0.95))
 	subtitle.custom_minimum_size = Vector2(244, 46)
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
@@ -153,7 +154,7 @@ func _build_hero_panel() -> void:
 
 	var orbit_card := _panel(Vector2(286, 22), Vector2(148, 176), Color(0.05, 0.10, 0.17, 0.82), Color(0.42, 0.68, 0.88, 0.22), 22)
 	panel.add_child(orbit_card)
-	var orbit_label := _label(orbit_card, "MAIN MODES", Vector2(0, 18), 12, Color(0.82, 0.92, 1.0))
+	var orbit_label := _label(orbit_card, "GAME FLOW", Vector2(0, 18), 12, Color(0.82, 0.92, 1.0))
 	orbit_label.custom_minimum_size = Vector2(148, 18)
 	orbit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var orbit_body := _label(orbit_card, "Campaign\nEndless\nArcade", Vector2(0, 48), 16, Color(0.90, 0.96, 1.0))
@@ -175,7 +176,7 @@ func _build_campaign_card() -> void:
 	_add_card_cap(card, "PROGRESSION", Color(1.0, 0.88, 0.34), Vector2(18, 14), 110.0)
 
 	_label(card, "Campaign", Vector2(18, 42), 24, Color(1.0, 0.90, 0.36))
-	var sub := _label(card, "Clear stages, earn stars, and unlock harder constraints.", Vector2(18, 74), 12, Color(0.80, 0.88, 0.96))
+	var sub := _label(card, "Clear stages, unlock the next mission, and chase flawless clears.", Vector2(18, 74), 12, Color(0.80, 0.88, 0.96))
 	sub.custom_minimum_size = Vector2(272, 40)
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
@@ -185,10 +186,10 @@ func _build_campaign_card() -> void:
 
 	var chip := _panel(Vector2(310, 18), Vector2(116, 60), Color(0.10, 0.10, 0.18, 0.94), Color(0.56, 0.76, 0.94, 0.22), 18)
 	card.add_child(chip)
-	var chip_title := _label(chip, "Stars", Vector2(0, 10), 11, Color(0.72, 0.84, 0.96))
+	var chip_title := _label(chip, "Flawless", Vector2(0, 10), 11, Color(0.72, 0.84, 0.96))
 	chip_title.custom_minimum_size = Vector2(116, 16)
 	chip_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var chip_body := _label(chip, "%d / %d" % [_get_total_campaign_stars(), _campaign_max_stars()], Vector2(0, 28), 18, Color(0.98, 0.90, 0.46))
+	var chip_body := _label(chip, "%d / %d" % [_get_flawless_campaign_count(), _campaign_total_levels()], Vector2(0, 28), 18, Color(0.98, 0.90, 0.46))
 	chip_body.custom_minimum_size = Vector2(116, 20)
 	chip_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
@@ -295,7 +296,7 @@ func _refresh_header_stats() -> void:
 func _refresh_campaign_status() -> void:
 	var next := _next_campaign_level()
 	if next.is_empty():
-		_campaign_status.text = "Campaign cleared. Replay for cleaner scores and more stars."
+		_campaign_status.text = "Campaign cleared. Replay on different maps or chase flawless clears."
 		return
 	_campaign_status.text = "Next level %02d: %s\n%s" % [
 		int(next.get("id", 1)),
@@ -324,17 +325,15 @@ func _next_campaign_level() -> Dictionary:
 			return level_data
 	return CampaignData.LEVELS[CampaignData.LEVELS.size() - 1] if not CampaignData.LEVELS.is_empty() else {}
 
-func _get_total_campaign_stars() -> int:
+func _get_flawless_campaign_count() -> int:
 	var total := 0
 	for i in range(1, _campaign_total_levels() + 1):
-		total += SaveManager.get_campaign_stars(i)
+		if SaveManager.is_campaign_full_hp(i):
+			total += 1
 	return total
 
 func _campaign_total_levels() -> int:
 	return maxi(1, CampaignData.get_total_levels())
-
-func _campaign_max_stars() -> int:
-	return _campaign_total_levels() * 3
 
 func _on_campaign() -> void:
 	SoundManager.play_ui_click()
@@ -391,7 +390,7 @@ func _build_mode_difficulty_picker(content: Control) -> void:
 
 func _build_map_picker(content: Control, start_y: float, selected_map: int, callable: Callable) -> void:
 	_label(content, "Map", Vector2(22, start_y), 16, Color(0.95, 0.90, 0.50))
-	var map_types: Array = GameData.MapType.values()
+	var map_types: Array = GameData.get_canonical_map_types()
 	for index in range(map_types.size()):
 		var map_id: int = map_types[index]
 		var column := index % 2
@@ -569,16 +568,17 @@ func _refresh_continue_button() -> void:
 	_continue_btn.text = "Continue" if has_save else "No Save"
 
 func _show_campaign_overlay() -> void:
-	var content := _overlay_panel("Campaign", "Choose any unlocked stage, review constraints quickly, and push progression.")
+	var content := _overlay_panel("Campaign", "Choose an unlocked stage, pick a map, and push Kotlin campaign progression.")
 
-	var summary := _label(content, "Progress %d / %d  |  Stars %d / %d" % [CampaignData.get_beaten_count(), _campaign_total_levels(), _get_total_campaign_stars(), _campaign_max_stars()], Vector2(22, 96), 15, Color(0.90, 0.96, 1.0))
+	var summary := _label(content, "Progress %d / %d  |  Flawless %d" % [CampaignData.get_beaten_count(), _campaign_total_levels(), _get_flawless_campaign_count()], Vector2(22, 96), 15, Color(0.90, 0.96, 1.0))
 	summary.custom_minimum_size = Vector2(380, 24)
-	var legend := _label(content, "Tags: FOG, DUAL BASE, BRANCH, MINI BOSS, NO UPGRADES", Vector2(22, 120), 11, Color(0.64, 0.78, 0.92))
+	var legend := _label(content, "Map selection stays separate from level selection, matching the Kotlin flow.", Vector2(22, 120), 11, Color(0.64, 0.78, 0.92))
 	legend.custom_minimum_size = Vector2(404, 18)
+	_build_map_picker(content, 146, _selected_campaign_map, _set_campaign_map)
 
 	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(18, 146)
-	scroll.size = Vector2(420, 636)
+	scroll.position = Vector2(18, 300)
+	scroll.size = Vector2(420, 482)
 	content.add_child(scroll)
 
 	var list := VBoxContainer.new()
@@ -590,39 +590,42 @@ func _show_campaign_overlay() -> void:
 		var level_id := int(level_data.get("id", 0))
 		var unlocked := CampaignData.is_unlocked(level_id)
 		var beaten := SaveManager.is_campaign_beaten(level_id)
-		var stars := SaveManager.get_campaign_stars(level_id)
-		var row := _panel(Vector2.ZERO, Vector2(402, 84), Color(0.06, 0.08, 0.14, 0.94), Color(0.42, 0.58, 0.78, 0.20), 16)
-		row.custom_minimum_size = Vector2(402, 84)
+		var flawless := SaveManager.is_campaign_full_hp(level_id)
+		var row := _panel(Vector2.ZERO, Vector2(402, 98), Color(0.06, 0.08, 0.14, 0.94), Color(0.42, 0.58, 0.78, 0.20), 16)
+		row.custom_minimum_size = Vector2(402, 98)
 		list.add_child(row)
 		var badge := _panel(Vector2(8, 10), Vector2(56, 64), Color(0.08, 0.12, 0.20, 0.96), Color(0.50, 0.66, 0.84, 0.28), 12)
 		row.add_child(badge)
 		var badge_title := _label(badge, "%02d" % level_id, Vector2(0, 8), 20, Color(0.90, 0.96, 1.0))
 		badge_title.custom_minimum_size = Vector2(56, 22)
 		badge_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var badge_stars := _label(badge, ("*").repeat(stars) + ("-").repeat(3 - stars), Vector2(0, 38), 11, Color(1.0, 0.88, 0.48))
-		badge_stars.custom_minimum_size = Vector2(56, 14)
-		badge_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var badge_flawless := _label(badge, "FL" if flawless else "--", Vector2(0, 38), 11, Color(1.0, 0.88, 0.48))
+		badge_flawless.custom_minimum_size = Vector2(56, 14)
+		badge_flawless.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-		var title := _label(row, str(level_data.get("title", "Campaign")), Vector2(74, 10), 15, Color(0.92, 0.98, 1.0))
+		var title := _label(row, "%s  %s" % [level_data.get("emoji", ""), level_data.get("title", "Campaign")], Vector2(74, 10), 15, Color(0.92, 0.98, 1.0))
 		title.custom_minimum_size = Vector2(224, 18)
 		title.clip_text = true
+		var description := _label(row, str(level_data.get("description", "")), Vector2(74, 29), 10, Color(0.70, 0.82, 0.95))
+		description.custom_minimum_size = Vector2(224, 14)
+		description.clip_text = true
 
 		var status_line := "Locked"
 		if unlocked:
 			status_line = "Cleared" if beaten else "Unlocked"
 		var target_wave := int(level_data.get("target_wave", 0))
-		var meta := _label(row, "Wave %d  |  %s" % [target_wave, status_line], Vector2(74, 32), 11, Color(0.68, 0.82, 0.96))
+		var meta := _label(row, "Wave %d  |  %s" % [target_wave, status_line], Vector2(74, 48), 11, Color(0.68, 0.82, 0.96))
 		meta.custom_minimum_size = Vector2(224, 14)
 		meta.clip_text = true
 
 		var tags := _campaign_constraint_tokens(level_data)
 		var tags_text := "Tags: " + (", ".join(tags) if not tags.is_empty() else "Standard")
-		var constraints := _label(row, tags_text, Vector2(74, 52), 10, Color(0.58, 0.72, 0.90))
+		var constraints := _label(row, tags_text, Vector2(74, 67), 10, Color(0.58, 0.72, 0.90))
 		constraints.custom_minimum_size = Vector2(224, 14)
 		constraints.clip_text = true
 
 		var row_color := _campaign_row_color(level_data, beaten)
-		var row_btn := _button(row, "PLAY" if unlocked else "LOCKED", Vector2(306, 20), Vector2(88, 44), row_color)
+		var row_btn := _button(row, "PLAY" if unlocked else "LOCKED", Vector2(306, 27), Vector2(88, 44), row_color)
 		row_btn.add_theme_font_size_override("font_size", 14)
 		row_btn.disabled = not unlocked
 		if unlocked:
@@ -630,14 +633,6 @@ func _show_campaign_overlay() -> void:
 
 func _campaign_constraint_tokens(level_data: Dictionary) -> Array:
 	var tokens: Array = []
-	if bool(level_data.get("fog", false)):
-		tokens.append("FOG")
-	if bool(level_data.get("double_base", false)):
-		tokens.append("DUAL BASE")
-	if bool(level_data.get("branching", false)):
-		tokens.append("BRANCH")
-	if int(level_data.get("mini_boss_interval", 0)) > 0:
-		tokens.append("MINI BOSS")
 	if not bool(level_data.get("upgrades", true)):
 		tokens.append("NO UPGRADES")
 	return tokens
@@ -648,12 +643,6 @@ func _campaign_constraints_text(level_data: Dictionary) -> String:
 
 func _campaign_row_color(level_data: Dictionary, beaten: bool) -> Color:
 	var color := Color(0.08, 0.18, 0.12) if beaten else Color(0.08, 0.10, 0.18)
-	if bool(level_data.get("fog", false)):
-		color = color.lerp(Color(0.10, 0.16, 0.24), 0.45)
-	if bool(level_data.get("double_base", false)):
-		color = color.lerp(Color(0.10, 0.20, 0.26), 0.35)
-	if bool(level_data.get("branching", false)):
-		color = color.lerp(Color(0.20, 0.18, 0.08), 0.30)
 	return color
 
 func _start_campaign_level(level_data: Dictionary) -> void:
@@ -663,8 +652,11 @@ func _start_campaign_level(level_data: Dictionary) -> void:
 	var node: Node = scene.instantiate()
 	get_tree().root.add_child(node)
 	get_tree().current_scene = node
-	node.configure_campaign(level_data)
+	node.configure_campaign(level_data, _selected_campaign_map)
 	queue_free()
+
+func _set_campaign_map(map_id: int) -> void:
+	_selected_campaign_map = map_id
 
 func _show_skill_tree_overlay() -> void:
 	var content := _overlay_panel("Skill Tree", "Spend diamonds on permanent upgrades. Prestige unlocks Page 2 skills.")
@@ -833,7 +825,7 @@ func _show_stats_overlay() -> void:
 	var content := _overlay_panel("Stats", "Lifetime combat, progression, and records.")
 	var favorite_tower := "None yet"
 	var favorite_count := 0
-	for ttype in GameData.TowerType.values():
+	for ttype in GameData.get_canonical_tower_types():
 		var key_name := str(GameData.TowerType.keys()[ttype])
 		var count := SaveManager.get_stat("tower_count_%s" % key_name)
 		if count > favorite_count:
@@ -879,7 +871,7 @@ func _show_stats_overlay() -> void:
 		"",
 		"Campaign",
 		"• Cleared: %d / %d" % [CampaignData.get_beaten_count(), _campaign_total_levels()],
-		"• Stars: %d / %d" % [_get_total_campaign_stars(), _campaign_max_stars()],
+		"• Flawless clears: %d" % _get_flawless_campaign_count(),
 	])
 	stats.text = _build_stats_text(favorite_tower, unlocked)
 	content.add_child(stats)
@@ -923,14 +915,14 @@ func _build_stats_text(favorite_tower: String, unlocked_count: int) -> String:
 		"",
 		"Campaign",
 		"- Cleared: %d / %d" % [CampaignData.get_beaten_count(), _campaign_total_levels()],
-		"- Stars: %d / %d" % [_get_total_campaign_stars(), _campaign_max_stars()],
+		"- Flawless clears: %d" % _get_flawless_campaign_count(),
 	])
 
 func _build_help_text() -> String:
 	return "\n".join([
 		"BASE",
 		"- Defend the base at the bottom. If base HP reaches 0, the run ends.",
-		"- In some campaign stages, dual-base mode is active and enemies can pressure two lanes.",
+		"- Campaign in parity mode uses Kotlin restrictions and rewards only.",
 		"",
 		"PLAYER",
 		"- Click or drag to move your hero.",
@@ -950,15 +942,9 @@ func _build_help_text() -> String:
 		"- LIGHTNING: chained strikes from target point.",
 		"",
 		"MODES",
-		"- Campaign: handcrafted stages with restrictions, stars, and progression unlocks.",
+		"- Campaign: handcrafted stages with restrictions, flawless clears, and progression unlocks.",
 		"- Endless: choose difficulty and map, then survive as long as possible.",
 		"- Extra Modes: Boss Rush, Boss Gauntlet, Daily Challenge, and Randomizer.",
-		"",
-		"CAMPAIGN TAGS",
-		"- FOG: reduced vision outside reveal zones.",
-		"- DUAL: double-base defense pattern.",
-		"- BRANCH: tower branching enabled at level 5.",
-		"- MINI: periodic mini-boss pressure waves.",
 		"",
 		"TIPS",
 		"- Mix damage types to bypass resistances.",

@@ -33,8 +33,8 @@ var synergy_mult: float = 1.0
 # Projectile scene reference (passed from game)
 var _proj_scene: PackedScene = null
 
-const MAX_LEVEL := 10
-const BRANCH_LEVEL := 5
+const MAX_LEVEL := 5
+const BRANCH_LEVEL := 999
 
 # ─── Color palettes per tower type ────────────────────────────────────────────
 const TOWER_COLORS := {
@@ -76,7 +76,7 @@ func setup(ttype: int, tdata: Dictionary, dmg_bonus_mult: float, cd_mult: float,
 	target_mode = initial_target_mode
 	branch = 0
 	branch_name = "Core"
-	branching_enabled = enable_branching
+	branching_enabled = false
 	synergy_stacks = 0
 	synergy_mult = 1.0
 	fire_timer = 1.0 / maxf(fire_rate, 0.01)
@@ -88,10 +88,10 @@ func setup(ttype: int, tdata: Dictionary, dmg_bonus_mult: float, cd_mult: float,
 func _update_level_label() -> void:
 	if level_label:
 		if level >= MAX_LEVEL:
-			level_label.text = "MAX%s" % ("A" if branch == 1 else ("C" if branch == 2 else ""))
+			level_label.text = "MAX"
 			level_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.0))
 		else:
-			level_label.text = "Lv%d%s" % [level, ("A" if branch == 1 else ("C" if branch == 2 else ""))]
+			level_label.text = "Lv%d" % level
 			level_label.add_theme_color_override("font_color", Color(0.7, 0.9, 1.0, 0.8))
 
 # ─── Animation tick ───────────────────────────────────────────────────────────
@@ -165,11 +165,6 @@ func _draw() -> void:
 		GameData.TowerType.POISON:   _draw_poison_tower(top_col, accent)
 		GameData.TowerType.TESLA:    _draw_tesla_tower(top_col, accent)
 		GameData.TowerType.ICE:      _draw_ice_tower(top_col, accent)
-		GameData.TowerType.FLAME:    _draw_flame_tower(top_col, accent)
-		GameData.TowerType.NECRO:    _draw_necro_tower(top_col, accent)
-		GameData.TowerType.BALLISTA: _draw_ballista_tower(top_col, accent)
-		GameData.TowerType.VORTEX:   _draw_vortex_tower(top_col, accent)
-		GameData.TowerType.HEALER:   _draw_healer_tower(top_col, accent)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	# Shoot flash
@@ -403,10 +398,6 @@ func tick(dt: float, enemies: Array, _freeze_mult: float, target_mode: int, rang
 					e.ice_slow_timer = 0.3
 		return
 
-	# Healer: no normal attack
-	if tower_type == GameData.TowerType.HEALER:
-		return
-
 	# Find target and shoot
 	if fire_timer <= 0 and fire_rate > 0:
 		var target := _pick_target(enemies, target_mode, effective_range)
@@ -461,21 +452,13 @@ func _fire_at(target: Node, gm: Node) -> void:
 			chain_dmg *= 0.7
 		return
 
-	# Splash for Cannon and Vortex
+	# Splash for Cannon
 	if tower_type == GameData.TowerType.CANNON:
 		var splash_range := 80.0
 		for e in gm.enemy_container.get_children():
 			if not e.is_dead() and target.position.distance_to(e.position) <= splash_range:
 				var splash_dmg := shot_damage * (0.6 if e != target else 1.0)
 				e.take_damage(splash_dmg, damage_type, "tower_%d" % tower_type)
-		_spawn_projectile_toward(target.position, gm)
-		return
-
-	# Flame: apply burn
-	if tower_type == GameData.TowerType.FLAME:
-		target.take_damage(shot_damage, damage_type, "tower_%d" % tower_type)
-		target.burn_timer = maxf(target.burn_timer, 3.0)
-		target.burn_dps = shot_damage * 0.3
 		_spawn_projectile_toward(target.position, gm)
 		return
 
@@ -514,30 +497,19 @@ func _get_projectile_color() -> Color:
 		GameData.TowerType.POISON:   return Color(0.2, 0.9, 0.2)
 		GameData.TowerType.TESLA:    return Color(1.0, 0.9, 0.0)
 		GameData.TowerType.ICE:      return Color(0.4, 0.85, 1.0)
-		GameData.TowerType.FLAME:    return Color(1.0, 0.4, 0.0)
-		GameData.TowerType.NECRO:    return Color(0.4, 0.0, 0.7)
-		GameData.TowerType.BALLISTA: return Color(0.8, 0.6, 0.2)
-		GameData.TowerType.VORTEX:   return Color(0.3, 0.4, 0.9)
-		GameData.TowerType.HEALER:   return Color(0.1, 0.9, 0.4)
 		_:                           return Color(0.9, 0.8, 0.3)
 
 func _get_projectile_speed() -> float:
 	match tower_type:
-		GameData.TowerType.BALLISTA: return 620.0
 		GameData.TowerType.CANNON: return 320.0
 		GameData.TowerType.TESLA: return 760.0
-		GameData.TowerType.FLAME: return 360.0
-		GameData.TowerType.VORTEX: return 300.0
 		_: return 460.0
 
 func _get_projectile_style() -> String:
 	match tower_type:
 		GameData.TowerType.CANNON: return "shell"
 		GameData.TowerType.TESLA: return "arc"
-		GameData.TowerType.BALLISTA: return "bolt"
-		GameData.TowerType.FLAME: return "ember"
 		GameData.TowerType.POISON: return "blob"
-		GameData.TowerType.VORTEX: return "orb"
 		GameData.TowerType.MAGIC: return "orb"
 		_: return "bolt"
 
@@ -547,10 +519,10 @@ func upgrade(dmg_mult: float, cd_mult: float, enable_branching: bool = false) ->
 	if level >= MAX_LEVEL:
 		return
 	level += 1
-	damage *= 1.12 * maxf(dmg_mult, 1.0)
-	attack_range *= 1.04
-	fire_rate *= 1.06
-	ability_cooldown = maxf(ability_cooldown * 0.95 * cd_mult, 3.0)
+	damage *= 1.4 * maxf(dmg_mult, 1.0)
+	attack_range += 15.0
+	fire_rate *= 1.15
+	ability_cooldown = maxf(ability_cooldown * cd_mult, 3.0)
 	if branch == 0 and level >= BRANCH_LEVEL and (enable_branching or branching_enabled):
 		_apply_branch_bonus()
 	fire_timer = 0.0
@@ -560,8 +532,6 @@ func upgrade(dmg_mult: float, cd_mult: float, enable_branching: bool = false) ->
 func _apply_branch_bonus() -> void:
 	var utility_towers := [
 		GameData.TowerType.ICE,
-		GameData.TowerType.HEALER,
-		GameData.TowerType.VORTEX,
 		GameData.TowerType.POISON,
 		GameData.TowerType.TESLA,
 	]

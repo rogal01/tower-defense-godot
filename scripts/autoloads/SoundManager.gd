@@ -103,15 +103,15 @@ func play_victory_stinger() -> void:
 
 func play_shot(tower_type: int) -> void:
 	match tower_type:
-		GameData.TowerType.ARROW, GameData.TowerType.BALLISTA:
+		GameData.TowerType.ARROW:
 			_play_sfx("shot_arrow")
-		GameData.TowerType.MAGIC, GameData.TowerType.NECRO, GameData.TowerType.VORTEX:
+		GameData.TowerType.MAGIC, GameData.TowerType.ICE:
 			_play_sfx("shot_magic")
 		GameData.TowerType.CANNON:
 			_play_sfx("shot_cannon")
 		GameData.TowerType.TESLA:
 			_play_sfx("shot_tesla")
-		GameData.TowerType.FLAME, GameData.TowerType.POISON:
+		GameData.TowerType.POISON:
 			_play_sfx("shot_flame")
 		_:
 			_play_sfx("ui_click")

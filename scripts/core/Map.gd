@@ -98,10 +98,8 @@ func _draw_background(map_data: Dictionary) -> void:
 	match map_type:
 		GameData.MapType.SNOW:
 			glow_color = Color(0.84, 0.90, 1.0, 0.18)
-		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			glow_color = Color(1.0, 0.38, 0.10, 0.18)
-		GameData.MapType.ENCHANTED:
-			glow_color = Color(0.70, 0.40, 0.96, 0.18)
+		GameData.MapType.DESERT:
+			glow_color = Color(1.0, 0.82, 0.48, 0.16)
 	if night_mode_active:
 		glow_color = Color(0.72, 0.82, 1.0, 0.14)
 	draw_circle(Vector2(392, 118), 84.0, glow_color)
@@ -146,17 +144,11 @@ func _draw_background(map_data: Dictionary) -> void:
 		match map_type:
 			GameData.MapType.DESERT:
 				color = Color(1.0, 0.88, 0.60, alpha * 0.8)
-			GameData.MapType.ENCHANTED:
-				color = Color(0.78, 0.62, 1.0, alpha * 1.2)
-			GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-				color = Color(1.0, 0.54, 0.24, alpha * 0.9)
 		draw_circle(particle["pos"], particle["size"], color)
 
 	match map_type:
 		GameData.MapType.SNOW:
 			draw_rect(Rect2(0, 662, 480, 192), Color(0.92, 0.96, 1.0, 0.10))
-		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			draw_rect(Rect2(0, 0, 480, 854), Color(0.18, 0.04, 0.02, 0.14))
 		GameData.MapType.DESERT:
 			draw_rect(Rect2(0, 0, 480, 854), Color(0.32, 0.22, 0.08, 0.08))
 	if night_mode_active:
@@ -227,17 +219,11 @@ func _draw_tree(pos: Vector2, scale: float) -> void:
 			draw_line(pos, pos + Vector2(0, -16 * scale), Color(0.40, 0.26, 0.12), 2.6 * scale)
 			draw_line(pos + Vector2(0, -10 * scale), pos + Vector2(9 * scale, -18 * scale), Color(0.42, 0.56, 0.22), 2.4 * scale)
 			draw_line(pos + Vector2(0, -8 * scale), pos + Vector2(-8 * scale, -15 * scale), Color(0.42, 0.56, 0.22), 2.2 * scale)
-		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			draw_line(pos, pos + Vector2(0, -18 * scale), Color(0.18, 0.12, 0.08), 2.4 * scale)
-			draw_line(pos + Vector2(0, -8 * scale), pos + Vector2(6 * scale, -16 * scale), Color(0.22, 0.14, 0.10), 1.6 * scale)
-			draw_line(pos + Vector2(0, -10 * scale), pos + Vector2(-7 * scale, -19 * scale), Color(0.22, 0.14, 0.10), 1.6 * scale)
 		_:
 			draw_rect(Rect2(pos.x - 2.5 * scale, pos.y - 11.0 * scale, 5.0 * scale, 12.0 * scale), Color(0.42, 0.28, 0.12))
 			var leaves := Color(0.18, 0.52, 0.24)
 			if map_type == GameData.MapType.SNOW:
 				leaves = Color(0.66, 0.80, 0.74)
-			elif map_type == GameData.MapType.ENCHANTED:
-				leaves = Color(0.42, 0.30, 0.64)
 			draw_circle(pos + Vector2(0, -15 * scale), 9.0 * scale, leaves)
 			draw_circle(pos + Vector2(-6 * scale, -11 * scale), 5.0 * scale, leaves.darkened(0.06))
 			draw_circle(pos + Vector2(6 * scale, -10 * scale), 5.2 * scale, leaves.lightened(0.06))
@@ -246,8 +232,6 @@ func _draw_rock(pos: Vector2, scale: float) -> void:
 	var color := Color(0.42, 0.42, 0.46)
 	if map_type == GameData.MapType.SNOW:
 		color = Color(0.68, 0.72, 0.78)
-	elif map_type == GameData.MapType.LAVA or map_type == GameData.MapType.VOLCANO:
-		color = Color(0.28, 0.16, 0.12)
 	draw_colored_polygon([
 		pos + Vector2(-8, 4) * scale,
 		pos + Vector2(-5, -6) * scale,
@@ -258,9 +242,7 @@ func _draw_rock(pos: Vector2, scale: float) -> void:
 
 func _draw_shrub(pos: Vector2, scale: float) -> void:
 	var color := Color(0.20, 0.46, 0.22)
-	if map_type == GameData.MapType.ENCHANTED:
-		color = Color(0.42, 0.24, 0.58)
-	elif map_type == GameData.MapType.DESERT:
+	if map_type == GameData.MapType.DESERT:
 		color = Color(0.56, 0.48, 0.22)
 	draw_circle(pos, 6.0 * scale, color)
 	draw_circle(pos + Vector2(-4, -1) * scale, 4.2 * scale, color.lightened(0.05))
@@ -302,10 +284,6 @@ func _draw_foreground_haze() -> void:
 	match map_type:
 		GameData.MapType.SNOW:
 			draw_rect(Rect2(0, 580, 480, 274), Color(0.96, 0.98, 1.0, 0.03))
-		GameData.MapType.ENCHANTED:
-			draw_rect(Rect2(0, 0, 480, 854), Color(0.42, 0.18, 0.58, 0.03))
-		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			draw_rect(Rect2(0, 0, 480, 854), Color(1.0, 0.18, 0.04, 0.03))
 
 func _draw_fog_of_war() -> void:
 	if not fog_of_war_active:

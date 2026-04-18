@@ -149,16 +149,8 @@ func _show_victory(stars: int, score: int, level_id: int) -> void:
 	_lbl_title.add_theme_color_override("font_color", Color(1.0, 0.90, 0.30))
 	_lbl_wave.text = "Stage %02d  |  %s" % [level_id, level_data.get("title", "Campaign")]
 	_lbl_score.text = "Score %d" % score
-	_lbl_high.text = "Stars %s" % (("*").repeat(stars) + ("-").repeat(3 - stars))
+	_lbl_high.text = "Flawless %s" % ("YES" if stars >= 3 else "NO")
 	var constraints: Array[String] = []
-	if bool(level_data.get("fog", false)):
-		constraints.append("FOG")
-	if bool(level_data.get("double_base", false)):
-		constraints.append("DUAL BASE")
-	if bool(level_data.get("branching", false)):
-		constraints.append("BRANCHING")
-	if int(level_data.get("mini_boss_interval", 0)) > 0:
-		constraints.append("MINI BOSS")
 	if not bool(level_data.get("upgrades", true)):
 		constraints.append("NO UPGRADES")
 	var constraints_text := "Standard rules" if constraints.is_empty() else ", ".join(constraints)
@@ -172,7 +164,7 @@ func _show_victory(stars: int, score: int, level_id: int) -> void:
 		constraints_text,
 	]
 	var total_levels := maxi(1, CampaignData.get_total_levels())
-	_lbl_progress.text = "Campaign %d / %d cleared  |  Three-star clears %d" % [
+	_lbl_progress.text = "Campaign %d / %d cleared  |  Flawless clears %d" % [
 		CampaignData.get_beaten_count(),
 		total_levels,
 		CampaignData.get_three_star_count(),
@@ -200,7 +192,7 @@ func _on_next_level() -> void:
 	var game_node: Node = game_scene.instantiate()
 	get_tree().root.add_child(game_node)
 	get_tree().current_scene = game_node
-	game_node.configure_campaign(level_data)
+	game_node.configure_campaign(level_data, int(gm.get("map_type")) if gm else GameData.MapType.CLASSIC)
 	get_parent().queue_free()
 
 func _label(parent: Control, text: String, pos: Vector2, font_size: int, color: Color) -> Label:

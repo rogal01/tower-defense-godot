@@ -404,7 +404,7 @@ func configure_daily_challenge(p_map_type: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = daily_challenge_seed
 	var all_mods: Array = []
-	for mod in GameData.WaveModifier.values():
+	for mod in GameData.get_canonical_wave_modifiers():
 		if mod != GameData.WaveModifier.NONE:
 			all_mods.append(mod)
 	daily_challenge_modifiers.clear()
@@ -422,7 +422,7 @@ func configure_daily_challenge(p_map_type: int) -> void:
 	_broadcast_state()
 
 func configure_randomizer(p_map_type: int = -1) -> void:
-	var map_values: Array = GameData.MapType.values()
+	var map_values: Array = GameData.get_canonical_map_types()
 	var resolved_map := p_map_type
 	if resolved_map < 0 or resolved_map >= map_values.size():
 		resolved_map = map_values[randi() % map_values.size()]
@@ -434,12 +434,12 @@ func configure_randomizer(p_map_type: int = -1) -> void:
 
 	randomizer_start_gold = rng.randi_range(20, 150)
 	randomizer_tower_costs.clear()
-	for ttype in GameData.TowerType.values():
+	for ttype in GameData.get_canonical_tower_types():
 		var base_cost := int(GameData.get_tower(ttype).get("cost", 50))
 		randomizer_tower_costs[ttype] = maxi(5, int(round(base_cost * rng.randf_range(0.5, 2.0))))
 
 	randomizer_power_cooldowns.clear()
-	for ptype in GameData.PowerType.values():
+	for ptype in GameData.get_canonical_power_types():
 		var base_cd := float(GameData.get_power(ptype).get("cooldown", 8.0))
 		randomizer_power_cooldowns[ptype] = base_cd * rng.randf_range(0.4, 1.8)
 
@@ -468,10 +468,10 @@ func configure_randomizer(p_map_type: int = -1) -> void:
 func configure_continue_saved() -> bool:
 	return load_game()
 
-func configure_campaign(ld: Dictionary) -> void:
+func configure_campaign(ld: Dictionary, selected_map: int = GameData.MapType.CLASSIC) -> void:
 	clear_saved_run()
 	campaign_level = ld
-	map_type        = ld.get("map", GameData.MapType.CLASSIC)
+	map_type        = selected_map
 	difficulty      = 1
 	is_endless      = false
 	is_boss_rush    = false
@@ -485,22 +485,15 @@ func configure_campaign(ld: Dictionary) -> void:
 	randomizer_power_cooldowns = {}
 	randomizer_power_damage_mult = 1.0
 	randomizer_start_gold = 50
-	fog_of_war_active = bool(ld.get("fog", false))
-	double_base_active = bool(ld.get("double_base", false))
-	dual_base_pattern = str(ld.get("dual_base_pattern", _get_dual_base_default_pattern()))
-	branching_active = bool(ld.get("branching", false))
-	mini_boss_interval = int(ld.get("mini_boss_interval", 0))
+	fog_of_war_active = false
+	double_base_active = false
+	dual_base_pattern = _get_dual_base_default_pattern()
+	branching_active = false
+	mini_boss_interval = 0
 	mini_bosses_pending = 0
 	mini_boss_archetypes = []
-	for token in ld.get("mini_boss_archetypes", []):
-		mini_boss_archetypes.append(str(token))
 	mini_boss_wave_queue.clear()
-	if mini_boss_interval > 0 and mini_boss_archetypes.is_empty():
-		mini_boss_archetypes = ["juggernaut", "raider", "warlock"]
 	secondary_base_position = _get_secondary_base_position()
-	var secondary_v: Variant = ld.get("secondary_base", secondary_base_position)
-	if secondary_v is Vector2:
-		secondary_base_position = secondary_v
 	boss_interval   = ld.get("boss_interval", 5)
 	enemy_hp_mult    = ld.get("hp",    1.0)
 	enemy_dmg_mult   = ld.get("dmg",   1.0)
@@ -530,16 +523,13 @@ func _trigger_campaign_win() -> void:
 	game_over = true
 	clear_saved_run()
 	var lid: int   = campaign_level.get("id",    0)
-	var star2: int = campaign_level.get("star2", 99999)
-	var star3: int = campaign_level.get("star3", 99999)
-	var stars: int = 1
-	if   score >= star3: stars = 3
-	elif score >= star2: stars = 2
+	var flawless := base_hp >= max_base_hp
+	var stars: int = 3 if flawless else 1
 	var diamonds_reward: int = campaign_level.get("diamonds", 3)
 	var total_run_diamonds := diamonds_reward + diamonds_this_run
 	if diamonds_reward > 0:
 		AchievementManager.on_diamonds_earned(diamonds_reward)
-	SaveManager.save_campaign_result(lid, stars)
+	SaveManager.save_campaign_result(lid, flawless)
 	if total_run_diamonds > 0:
 		SaveManager.add_diamonds(total_run_diamonds)
 		SaveManager.add_stat("lifetime_diamonds", total_run_diamonds)
@@ -651,7 +641,7 @@ func get_player_upgrade_costs() -> Dictionary:
 	}
 
 func _init_powers() -> void:
-	for pt in GameData.PowerType.values():
+	for pt in GameData.get_canonical_power_types():
 		power_cooldowns[pt] = 0.0
 
 func _spawn_player() -> void:
@@ -769,7 +759,7 @@ func _spawn_powerup() -> void:
 	var px: float = randf_range(60, screen_w - 60)
 	var py: float = randf_range(120, screen_h - 180)
 	pu.position = Vector2(px, py)
-	var power_types: Array = GameData.PowerType.values()
+	var power_types: Array = GameData.get_canonical_power_types()
 	pu.power_type = power_types[randi() % power_types.size()]
 	pu.connect("collected", Callable(self, "_on_powerup_collected"))
 	effects_container.add_child(pu)
@@ -793,9 +783,6 @@ func generate_paths() -> void:
 		GameData.MapType.CROSSROADS:   _gen_crossroads_paths(w, h, bx, by)
 		GameData.MapType.DESERT:       _gen_desert_paths(w, h, bx, by)
 		GameData.MapType.SNOW:         _gen_snow_paths(w, h, bx, by)
-		GameData.MapType.LAVA:         _gen_lava_paths(w, h, bx, by)
-		GameData.MapType.ENCHANTED:    _gen_enchanted_paths(w, h, bx, by)
-		GameData.MapType.VOLCANO:      _gen_volcano_paths(w, h, bx, by)
 	_retarget_paths_for_active_bases()
 
 func _jitter(base: float, range_val: float) -> float:
@@ -813,12 +800,6 @@ func _get_secondary_base_position() -> Vector2:
 			return Vector2(screen_w * 0.70, screen_h * 0.84)
 		GameData.MapType.SNOW:
 			return Vector2(screen_w * 0.31, screen_h * 0.84)
-		GameData.MapType.LAVA:
-			return Vector2(screen_w * 0.72, screen_h * 0.84)
-		GameData.MapType.ENCHANTED:
-			return Vector2(screen_w * 0.31, screen_h * 0.84)
-		GameData.MapType.VOLCANO:
-			return Vector2(screen_w * 0.70, screen_h * 0.84)
 		_:
 			return Vector2(screen_w * 0.70, screen_h * 0.84)
 
@@ -826,7 +807,7 @@ func _get_dual_base_default_pattern() -> String:
 	match map_type:
 		GameData.MapType.CROSSROADS:
 			return "crossroads_split"
-		GameData.MapType.ENCHANTED, GameData.MapType.VALLEY:
+		GameData.MapType.VALLEY:
 			return "adaptive"
 		_:
 			return "alternate"
@@ -1058,16 +1039,6 @@ func _generate_terrain_zones() -> void:
 		GameData.MapType.SNOW:
 			terrain_zones.append({"kind": "frost", "pos": Vector2(118, 292), "radius": 44.0, "strength": 0.82})
 			terrain_zones.append({"kind": "frost", "pos": Vector2(336, 506), "radius": 40.0, "strength": 0.8})
-		GameData.MapType.LAVA:
-			terrain_zones.append({"kind": "lava", "pos": Vector2(152, 378), "radius": 42.0, "dps": 12.0})
-			terrain_zones.append({"kind": "lava", "pos": Vector2(316, 566), "radius": 38.0, "dps": 10.0})
-		GameData.MapType.VOLCANO:
-			terrain_zones.append({"kind": "lava", "pos": Vector2(132, 328), "radius": 46.0, "dps": 16.0})
-			terrain_zones.append({"kind": "lava", "pos": Vector2(344, 486), "radius": 44.0, "dps": 14.0})
-			terrain_zones.append({"kind": "lava", "pos": Vector2(238, 640), "radius": 40.0, "dps": 12.0})
-		GameData.MapType.ENCHANTED:
-			terrain_zones.append({"kind": "arcane", "pos": Vector2(144, 262), "radius": 40.0, "pulse_damage": 14.0})
-			terrain_zones.append({"kind": "arcane", "pos": Vector2(322, 480), "radius": 36.0, "pulse_damage": 16.0})
 		GameData.MapType.DESERT:
 			terrain_zones.append({"kind": "dune", "pos": Vector2(132, 252), "radius": 44.0, "speed": 1.12})
 			terrain_zones.append({"kind": "dune", "pos": Vector2(332, 560), "radius": 40.0, "speed": 1.1})
@@ -1136,10 +1107,6 @@ func _get_map_hazard_text() -> String:
 	match map_type:
 		GameData.MapType.SNOW:
 			return "Frost fields slow enemies."
-		GameData.MapType.LAVA, GameData.MapType.VOLCANO:
-			return "Lava vents burn anything standing in them."
-		GameData.MapType.ENCHANTED:
-			return "Arcane wells pulse magic damage."
 		GameData.MapType.DESERT:
 			return "Dune gusts speed enemies up."
 		_:
@@ -1293,7 +1260,7 @@ func _start_next_wave() -> void:
 		current_wave_modifier = daily_challenge_modifiers[wave % daily_challenge_modifiers.size()]
 	elif wave >= 3 and randf() < 0.4:
 		var mods: Array = []
-		for mod in GameData.WaveModifier.values():
+		for mod in GameData.get_canonical_wave_modifiers():
 			if mod != GameData.WaveModifier.NONE:
 				mods.append(mod)
 		current_wave_modifier = mods[randi() % mods.size()] if not mods.is_empty() else GameData.WaveModifier.NONE
@@ -1301,7 +1268,7 @@ func _start_next_wave() -> void:
 		current_wave_modifier = GameData.WaveModifier.NONE
 
 	# Track map for cartographer achievement
-	var map_name: String = GameData.MapType.keys()[map_type]
+	var map_name: String = str(GameData.get_map(map_type).get("name", "Classic"))
 	SaveManager.add_map_played(map_name)
 	AchievementManager.on_maps_played(SaveManager.get_maps_played().size())
 
@@ -1442,8 +1409,6 @@ func _spawn_enemy() -> void:
 		regen
 	)
 
-	if current_wave_modifier == GameData.WaveModifier.SHIELDED:
-		e_node.shield_timer = 3.0
 	if elite_spawn_pending:
 		_apply_elite_enemy(e_node)
 		elite_spawn_pending = false
@@ -1834,7 +1799,7 @@ func sell_tower(tower_node: Node) -> void:
 	tower_node.queue_free()
 
 func upgrade_tower(tower_node: Node) -> bool:
-	if tower_node.level >= 10:
+	if tower_node.level >= 5:
 		return false
 	if not campaign_level.is_empty() and not campaign_level.get("upgrades", true):
 		return false
@@ -1844,8 +1809,8 @@ func upgrade_tower(tower_node: Node) -> bool:
 		return false
 	gold -= cost
 	gold_changed.emit(gold)
-	tower_node.upgrade(skill_tower_damage_bonus, skill_ability_cd_mult, branching_active)
-	if tower_node.level >= 10:
+	tower_node.upgrade(skill_tower_damage_bonus, skill_ability_cd_mult, false)
+	if tower_node.level >= 5:
 		AchievementManager.on_tower_maxed()
 	# Check if all towers are upgraded (level >= 2)
 	var upgraded := tower_container.get_children().filter(func(t): return t.level >= 2)
@@ -2090,11 +2055,6 @@ func _on_tower_ability(tower_node: Node) -> void:
 		GameData.TowerType.POISON:     _ability_plague(tower_node)
 		GameData.TowerType.TESLA:      _ability_overcharge(tower_node)
 		GameData.TowerType.ICE:        _ability_deep_freeze(tower_node)
-		GameData.TowerType.FLAME:      _ability_inferno(tower_node)
-		GameData.TowerType.NECRO:      _ability_soul_harvest(tower_node)
-		GameData.TowerType.BALLISTA:   _ability_siege_shot(tower_node)
-		GameData.TowerType.VORTEX:     _ability_singularity(tower_node)
-		GameData.TowerType.HEALER:     _ability_mass_heal(tower_node)
 
 func _ability_volley(t: Node) -> void:
 	var targets := _enemies_in_range(t.position, t.attack_range * 1.5, 8)
@@ -2645,11 +2605,6 @@ func _get_tower_accent_color(ttype: int) -> Color:
 		GameData.TowerType.POISON:   return Color(0.3, 0.9, 0.2)
 		GameData.TowerType.TESLA:    return Color(1.0, 0.9, 0.2)
 		GameData.TowerType.ICE:      return Color(0.7, 0.95, 1.0)
-		GameData.TowerType.FLAME:    return Color(1.0, 0.6, 0.1)
-		GameData.TowerType.NECRO:    return Color(0.6, 0.2, 0.8)
-		GameData.TowerType.BALLISTA: return Color(0.9, 0.7, 0.3)
-		GameData.TowerType.VORTEX:   return Color(0.4, 0.5, 1.0)
-		GameData.TowerType.HEALER:   return Color(0.3, 1.0, 0.5)
 		_:                           return Color(0.9, 0.8, 0.3)
 
 func _get_power_accent_color(power_type: int) -> Color:

@@ -656,12 +656,6 @@ func _move_along_path(dt: float) -> void:
 		var rage := 1.0 + (1.0 - hp / max_hp) * 1.5
 		effective_speed *= rage
 
-	# Berserker wave modifier: 1.5x speed below 50% HP
-	var gm_ref := _get_game_manager()
-	if gm_ref and gm_ref.current_wave_modifier == GameData.WaveModifier.BERSERKER:
-		if hp < max_hp * 0.5:
-			effective_speed *= 1.5
-
 	if dist < effective_speed + 1.0:
 		position = target
 		waypoint_idx += 1

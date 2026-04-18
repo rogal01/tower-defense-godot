@@ -8,11 +8,6 @@ const TOWER_NAMES := {
 	GameData.TowerType.POISON: "Poison",
 	GameData.TowerType.TESLA: "Tesla",
 	GameData.TowerType.ICE: "Ice",
-	GameData.TowerType.FLAME: "Flame",
-	GameData.TowerType.NECRO: "Necro",
-	GameData.TowerType.BALLISTA: "Ballista",
-	GameData.TowerType.VORTEX: "Vortex",
-	GameData.TowerType.HEALER: "Healer",
 }
 const POWER_NAMES := {
 	GameData.PowerType.FIREBALL: "FIRE",
@@ -279,7 +274,7 @@ func _build_power_strip() -> void:
 	title.custom_minimum_size = Vector2(62, 12)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	var power_types: Array = GameData.PowerType.values()
+	var power_types: Array = GameData.get_canonical_power_types()
 	for index in range(power_types.size()):
 		var ptype: int = power_types[index]
 		var btn := _make_button(
@@ -344,7 +339,7 @@ func _build_tower_panel() -> void:
 	drawer_body.custom_minimum_size = Vector2(132, 24)
 	drawer_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	var tower_types: Array = GameData.TowerType.values()
+	var tower_types: Array = GameData.get_canonical_tower_types()
 	for index in range(tower_types.size()):
 		var ttype: int = tower_types[index]
 		var column := index % 2
@@ -753,24 +748,16 @@ func _refresh_campaign_panel() -> void:
 	campaign_panel.visible = true
 	var level_id: int = cl.get("id", 0)
 	var target_wave: int = cl.get("target_wave", 0)
-	var stars: int = SaveManager.get_campaign_stars(level_id)
+	var flawless := SaveManager.is_campaign_full_hp(level_id)
 	var tags: Array[String] = []
-	if bool(cl.get("fog", false)):
-		tags.append("FOG")
-	if bool(cl.get("double_base", false)):
-		tags.append("DUAL")
-	if bool(cl.get("branching", false)):
-		tags.append("BRANCH")
-	if int(cl.get("mini_boss_interval", 0)) > 0:
-		tags.append("MINI")
 	if not bool(cl.get("upgrades", true)):
 		tags.append("NO-UP")
 	var tag_text := " ".join(tags) if not tags.is_empty() else "STANDARD"
-	lbl_campaign.text = "Stage %02d  Wave %d/%d\nStars %d  Clear %d\n%s" % [
+	lbl_campaign.text = "Stage %02d  Wave %d/%d\nFlawless %s  Clear %d\n%s" % [
 		level_id,
 		gm.wave,
 		target_wave,
-		stars,
+		"YES" if flawless else "NO",
 		CampaignData.get_beaten_count(),
 		tag_text,
 	]
@@ -963,13 +950,13 @@ func _add_panel_trim(panel: Panel, top_color: Color, bottom_color: Color) -> voi
 
 func _tower_button_color(ttype: int) -> Color:
 	match ttype:
-		GameData.TowerType.ARROW, GameData.TowerType.BALLISTA:
+		GameData.TowerType.ARROW:
 			return Color(0.12, 0.18, 0.28)
-		GameData.TowerType.MAGIC, GameData.TowerType.NECRO, GameData.TowerType.VORTEX:
+		GameData.TowerType.MAGIC:
 			return Color(0.16, 0.12, 0.28)
-		GameData.TowerType.CANNON, GameData.TowerType.FLAME:
+		GameData.TowerType.CANNON:
 			return Color(0.24, 0.12, 0.10)
-		GameData.TowerType.POISON, GameData.TowerType.HEALER:
+		GameData.TowerType.POISON:
 			return Color(0.10, 0.20, 0.14)
 		GameData.TowerType.ICE, GameData.TowerType.TESLA:
 			return Color(0.08, 0.18, 0.24)
