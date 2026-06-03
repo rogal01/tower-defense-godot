@@ -1,7 +1,21 @@
-# Tower.gd — Tower entity: targeting, firing, upgrades, range display
+## Tower entity — owns its own state, draws itself, and ticks under GameManager.
+##
+## Lifecycle:
+##   1. GameManager instantiates the scene and calls [method setup] with stats.
+##   2. Every frame, [method tick] is called with the live enemy list. The tower
+##      decides whether to shoot, picks a target by [member target_mode], and
+##      spawns a projectile via the GameManager's container.
+##   3. [method _process] only handles visual animation; gameplay-relevant timers
+##      are advanced inside [method tick] so they pause cleanly with the game.
+##
+## Tap handling lives in [method _unhandled_input] — we deliberately use a
+## generous 30 px touch radius so the small phone-screen towers stay tappable.
 extends Node2D
 
+## Emitted when the per-tower ability finishes cooling down (HUD uses this to
+## flash the ability button so the player notices).
 signal ability_fired()
+## Emitted when the player taps this tower (GameManager opens the upgrade panel).
 signal pressed()
 
 # ─── State ────────────────────────────────────────────────────────────────────
@@ -581,14 +595,17 @@ func _apply_branch_bonus() -> void:
 
 # ─── Input ────────────────────────────────────────────────────────────────────
 
-func _input_event(_viewport: Viewport, event: InputEvent, _shape_idx: int) -> void:
-	pass  # Handled by Area2D if needed; GameManager listens to touch directly
-
+## Picks up taps anywhere in the viewport and emits [signal pressed] if the tap
+## landed within 30 px of this tower. We listen via `_unhandled_input` (rather
+## than an Area2D) because the playfield is dense — adding per-tower input areas
+## was creating overlap headaches with the path tiles and projectile spawners.
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
-		if event.pressed:
-			if position.distance_to(event.position) <= 30:
-				pressed.emit()
+	var is_tap := event is InputEventScreenTouch \
+		or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT)
+	if not is_tap or not event.pressed:
+		return
+	if position.distance_to(event.position) <= 30:
+		pressed.emit()
 
 func set_show_range(visible_val: bool) -> void:
 	show_range = visible_val
