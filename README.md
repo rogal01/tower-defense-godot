@@ -1,6 +1,6 @@
 # Tower Defense Godot
 
-**The TD Ecosystem:** [📱 Kotlin/Android (Flagship)](https://github.com/rogal01/tower-defense-android) | [🎮 Godot (Fast Iteration)](https://github.com/rogal01/tower-defense-godot) | [⚙️ Unity (Code-First)](https://github.com/rogal01/tower-defense-unity-port)
+**The TD Ecosystem:** [Kotlin/Android (Flagship)](https://github.com/rogal01/tower-defense-android) | [Godot (Fast Iteration)](https://github.com/rogal01/tower-defense-godot) | [Unity (Code-First)](https://github.com/rogal01/tower-defense-unity-port)
 
 A mobile-first tower defense project built with **Godot 4.3** and focused on gameplay flow, UI clarity, and fast iteration.
 
